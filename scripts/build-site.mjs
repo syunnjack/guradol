@@ -20,6 +20,11 @@ const SITE_URL = 'https://guradol.jp'
 const SITE_NAME = 'グラドル名鑑'
 const CONTACT = 'info@guradol.jp'
 
+// 投票と口コミの保存先。匿名キーは公開してよい値で、守りはデータベース側の RLS。
+// 未設定のときは、投稿欄そのものを出さずにページを作る。
+const SUPABASE_URL = process.env.SUPABASE_URL || ''
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || ''
+
 // 1ページに並べる人数（一覧のページ送り）
 const PER_PAGE = 200
 // 分類ページを作る下限。これ未満はページにしない（中身が薄くなるため）
@@ -79,7 +84,7 @@ function renderWorks(works) {
   return `<ul class="work-list">${items}</ul>`
 }
 
-function shell({ title, description, canonical, crumbs, body, noindex }) {
+function shell({ title, description, canonical, crumbs, body, noindex, script }) {
   return `<!doctype html>
 <html lang="ja">
   <head>
@@ -96,6 +101,7 @@ function shell({ title, description, canonical, crumbs, body, noindex }) {
     <meta property="og:description" content="${escapeHtml(description)}" />
     <meta property="og:url" content="${canonical}" />
     <link rel="stylesheet" href="/assets/page.css" />
+    ${script ? `<script defer src="${script}"></script>` : ''}
   </head>
   <body>
     <div class="wrap">
@@ -109,6 +115,7 @@ function shell({ title, description, canonical, crumbs, body, noindex }) {
           <a href="/idol/">出演者一覧</a>
           <a href="/genre/">分類別</a>
           <a href="/maker/">メーカー別</a>
+          <a href="/ranking/">投票ランキング</a>
           <a href="/about/">このサイトについて</a>
         </nav>
         <p class="credit">作品データの出典: <a href="https://affiliate.dmm.com/api/" target="_blank" rel="noopener">DMM.com アフィリエイト Web サービス</a></p>
@@ -147,6 +154,7 @@ function renderIdol(person, related) {
     description,
     canonical,
     crumbs: `<a href="/idol/">出演者一覧</a> ＞ ${escapeHtml(person.name)}`,
+    script: '/assets/ugc.js',
     body: `
       <h1>${escapeHtml(person.name)}</h1>
       <p class="lead">${escapeHtml(description)}</p>
@@ -156,6 +164,10 @@ function renderIdol(person, related) {
         <p class="note">DMM.com に収録されている ${person.n.toLocaleString('ja-JP')} 件のうち、新しい ${person.w.length} 件です。</p>
       </section>
       ${genreHtml}
+      <section id="ugc" class="ugc"
+               data-slug="${escapeHtml(person.slug)}"
+               data-api="${escapeHtml(SUPABASE_URL)}"
+               data-key="${escapeHtml(SUPABASE_ANON_KEY)}"></section>
       ${relatedHtml}
       <section class="source-block">
         <h2>出典</h2>
@@ -228,6 +240,25 @@ h2 { font-size:18px; margin:30px 0 10px; display:flex; align-items:center; gap:8
 #hits { list-style:none; padding:0; margin:12px 0 0; }
 #hits li { padding:7px 0; border-bottom:1px solid #eceff5; }
 #hits a { color:#1b1f2a; text-decoration:none; }
+.ugc { margin-top:32px; border-top:1px solid #e2e6ef; padding-top:8px; }
+.vote-box { display:flex; align-items:center; gap:12px; margin:12px 0 4px; flex-wrap:wrap; }
+.vote { background:#2b4d7e; color:#fff; border:0; border-radius:8px; padding:10px 20px; font-size:15px; font-weight:700; cursor:pointer; }
+.vote[disabled] { background:#b7bdc9; cursor:default; }
+.vote-count { font-size:15px; color:#4b5563; }
+.reviews { list-style:none; padding:0; margin:10px 0; }
+.reviews li { background:#fff; border:1px solid #e2e6ef; border-radius:10px; padding:12px 14px; margin-bottom:10px; }
+.review-body { margin:0 0 6px; font-size:15px; white-space:pre-wrap; }
+.review-meta { margin:0; font-size:12px; color:#6b7280; }
+.review-form { display:flex; flex-direction:column; gap:6px; margin-top:16px; }
+.review-form label { font-size:13px; color:#4b5563; }
+.review-form input, .review-form textarea { font:inherit; padding:10px 12px; border:1px solid #d6dbe5; border-radius:8px; background:#fff; color:inherit; }
+.review-form .button { align-self:flex-start; border:0; cursor:pointer; background:#2b4d7e; color:#fff; border-radius:8px; padding:10px 20px; font-weight:700; }
+.rank-list { list-style:none; padding:0; margin:0; counter-reset:rank; }
+.rank-list li { display:flex; align-items:baseline; gap:10px; padding:8px 0; border-bottom:1px solid #eceff5; font-size:15px; }
+.rank-list li::before { counter-increment:rank; content:counter(rank); min-width:2.2em; color:#6b7280; font-size:13px; }
+.rank-list a { color:#1b1f2a; text-decoration:none; }
+.rank-list a:hover { color:#2b6cb0; text-decoration:underline; }
+.rank-count { font-size:13px; color:#6b7280; margin-left:auto; }
 footer { margin-top:44px; border-top:1px solid #e2e6ef; padding-top:16px; font-size:13px; color:#6b7280; }
 footer a { color:#2b6cb0; }
 .site-nav { display:flex; flex-wrap:wrap; gap:8px; margin:14px 0 12px; }
@@ -239,7 +270,9 @@ footer a { color:#2b6cb0; }
   .site-head, .crumbs, .related, .source-block, footer { border-color:#262b36; }
   .name-list li, #hits li { border-color:#1e222c; }
   .chips a, .pager a, .pager span, .search, .work img, .work .no-cover { background:#1a1e27; border-color:#262b36; }
-  .name-list a, .work a, #hits a { color:#e7eaf0; }
+  .name-list a, .work a, #hits a, .rank-list a { color:#e7eaf0; }
+  .reviews li, .review-form input, .review-form textarea { background:#1a1e27; border-color:#262b36; }
+  .ugc, .rank-list li { border-color:#262b36; }
   .site-head .site-name { color:#8ab4e8; }
   .crumbs a, .chips a, .sources a, footer a, .pager a { color:#8ab4e8; }
   .site-nav a { background:#1a1e27; border-color:#262b36; color:#8ab4e8; }
@@ -297,6 +330,8 @@ async function main() {
   await mkdir(path.join(outDir, 'data'), { recursive: true })
   await writeFile(path.join(outDir, 'assets/page.css'), PAGE_CSS, 'utf8')
   await writeFile(path.join(outDir, 'assets/search.js'), SEARCH_JS, 'utf8')
+  // 投票と口コミ、ランキングの読み込み。ビルドで作らずリポジトリに置いてある。
+  await cp(path.join(root, 'assets'), path.join(outDir, 'assets'), { recursive: true })
   await writeFile(path.join(outDir, 'CNAME'), 'guradol.jp\n', 'utf8')
 
   // 分類ごとの人。分類ページと「同じ分類でよく出ている方」に使う。
@@ -466,6 +501,24 @@ async function main() {
       <script defer src="/assets/search.js"></script>`,
   }), 'utf8')
 
+  // 投票ランキング。中身は表示時に Supabase から読む。
+  await mkdir(path.join(outDir, 'ranking'), { recursive: true })
+  await writeFile(path.join(outDir, 'ranking', 'index.html'), shell({
+    title: `投票ランキング｜${SITE_NAME}`,
+    description: 'このサイトで押された票の数による順位です。外部の人気度ではありません。',
+    canonical: `${SITE_URL}/ranking/`,
+    crumbs: '投票ランキング',
+    script: '/assets/ranking.js',
+    body: `
+      <h1>投票ランキング</h1>
+      <p class="lead"><strong>このサイトで押された票の数</strong>による順位です。
+      外部の人気度や売上ではありません。出演者のページから投票できます。</p>
+      <div id="ranking"
+           data-api="${escapeHtml(SUPABASE_URL)}"
+           data-key="${escapeHtml(SUPABASE_ANON_KEY)}"><p class="note">読み込んでいます…</p></div>`,
+  }), 'utf8')
+  urls.push(`${SITE_URL}/ranking/`)
+
   // このサイトについて
   await mkdir(path.join(outDir, 'about'), { recursive: true })
   await writeFile(path.join(outDir, 'about', 'index.html'), shell({
@@ -485,6 +538,10 @@ async function main() {
         <li><strong>アダルト作品へのリンク。</strong>このサイトでは扱いません</li>
         <li>独自の順位づけや評価</li>
       </ul>
+      <h2>投票と口コミについて</h2>
+      <p>投票は<strong>このサイトで押された票の数</strong>で、外部の人気度や売上ではありません。
+      口コミは実在の方についての書き込みなので、<strong>運営が内容を確認してから公開します。</strong>
+      悪口や、確認できない事実の断定は載せません。</p>
       <h2>広告について</h2>
       <p>作品へのリンクは DMM.com のアフィリエイトプログラムを利用しています。
       リンクから購入があった場合、運営者に紹介料が入ります。</p>

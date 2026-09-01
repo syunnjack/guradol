@@ -31,6 +31,10 @@ jobs:
           node-version: 24
 
       - run: node scripts/build-site.mjs
+        env:
+          # 匿名キーは公開してよい値。守りはデータベース側の RLS。
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
 
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
