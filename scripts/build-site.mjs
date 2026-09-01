@@ -20,6 +20,9 @@ const SITE_URL = 'https://guradol.jp'
 const SITE_NAME = 'グラドル名鑑'
 const CONTACT = 'info@guradol.jp'
 
+// Search Console の所有権確認。公開してよい値なので直接書く。
+const SITE_VERIFICATION = 'kzYhX_lYxpwnZjwTMxUp_RmF7mGw12MUPyCOL54kGR8'
+
 // 投票と口コミの保存先。匿名キーは公開してよい値で、守りはデータベース側の RLS。
 // 未設定のときは、投稿欄そのものを出さずにページを作る。
 const SUPABASE_URL = process.env.SUPABASE_URL || ''
@@ -98,6 +101,7 @@ function shell({ title, description, canonical, crumbs, body, noindex, script })
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>${escapeHtml(title)}</title>
     <meta name="description" content="${escapeHtml(description)}" />
+    <meta name="google-site-verification" content="${SITE_VERIFICATION}" />
     ${noindex ? '<meta name="robots" content="noindex,follow" />\n    ' : ''}<link rel="canonical" href="${canonical}" />
     <meta property="og:type" content="website" />
     <meta property="og:locale" content="ja_JP" />
