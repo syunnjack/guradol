@@ -49,7 +49,12 @@ function jsonLd(value) {
 }
 
 function slugify(name) {
-  const slug = String(name ?? '').trim().replace(/\s+/g, '-').replace(/[\\/?#%&=+]/g, '')
+  // URL に使えない文字と、Windows のファイル名に使えない文字を落とす。
+  // 「瑚桃きらり（MORE*）」のように * を含む名前があり、手元のビルドが落ちた。
+  const slug = String(name ?? '').trim()
+    .replace(/\s+/g, '-')
+    .replace(/[\\/?#%&=+*:"<>|]/g, '')
+    .replace(/\.+$/, '')
   return slug || 'unknown'
 }
 
