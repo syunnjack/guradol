@@ -33,7 +33,7 @@ jobs:
 
           # head でパイプを閉じると grep が SIGPIPE で落ち、pipefail のせいで
           # ジョブごと失敗する。いったん全部書き出してから切る。
-          curl -fsS "https://guradol.jp/sitemap.xml" > sitemap.xml
+          curl -fsS "https://gravure-meikan.jp/sitemap.xml" > sitemap.xml
           grep -oP '(?<=<loc>)[^<]+' sitemap.xml | sort > all-urls.txt
 
           touch data/indexnow-sent.txt
@@ -61,8 +61,8 @@ jobs:
           KEY="${INDEXNOW_KEY:-guradolindex2026}"
 
           # キーの実在確認。鍵ファイルが配信されていないと全件拒否される。
-          if ! curl -fsS "https://guradol.jp/${KEY}.txt" > /dev/null; then
-            echo "https://guradol.jp/${KEY}.txt が配信されていません。送信を中止します。"
+          if ! curl -fsS "https://gravure-meikan.jp/${KEY}.txt" > /dev/null; then
+            echo "https://gravure-meikan.jp/${KEY}.txt が配信されていません。送信を中止します。"
             exit 1
           fi
 
@@ -71,9 +71,9 @@ jobs:
           key = sys.argv[1]
           urls = [line.strip() for line in sys.stdin if line.strip()]
           print(json.dumps({
-              "host": "guradol.jp",
+              "host": "gravure-meikan.jp",
               "key": key,
-              "keyLocation": f"https://guradol.jp/{key}.txt",
+              "keyLocation": f"https://gravure-meikan.jp/{key}.txt",
               "urlList": urls,
           }, ensure_ascii=False))
           PY
