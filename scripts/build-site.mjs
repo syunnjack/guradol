@@ -50,6 +50,16 @@ const SKIP_GENRES = new Set([
   '独占配信', 'ハイビジョン', '期間限定セール', 'その他',
 ])
 
+// 売り方・形態の分類。**ページは残す**（すでに公開して検索に載っているため。
+// 出典から消えたわけでもないのに URL を落とさない）が、
+// 「同じ分類に出ている方」の手がかりには使わない。
+// 「DMMブックス限定特典付きの作品に出ている方」では、読む人に何も伝わらない。
+const WEAK_GENRES = new Set([
+  '独占販売', 'ディスクオンデマンド', 'グラビアセール', 'おすすめ商品', 'アウトレット',
+  '先行販売', 'DMMブックス限定特典付き', '抽選特典付き', 'デジタル特装版', '通常版',
+  'Blu-ray（ブルーレイ）', '3D', '2020年代前半（DOD）', 'アイドルグッズ',
+])
+
 function escapeHtml(value) {
   return String(value ?? '')
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -79,6 +89,81 @@ function jpDate(iso) {
 function readJson(file) {
   return readFile(file, 'utf8').then(JSON.parse)
 }
+
+function jpMonth(iso) {
+  return /^\d{4}-\d{2}/.test(iso || '')
+    ? iso.replace(/^(\d+)-(\d+).*$/, (_m, y, m) => `${Number(y)}年${Number(m)}月`)
+    : ''
+}
+
+/**
+ * 出演者ごとに、**数えられることだけ**をまとめる。
+ *
+ * `w` は新しい順に最大 8 件しか持っていない（fetch-gravure.py の WORKS_PER_ACTOR）。
+ * だから `n === w.length` のときだけ、内訳と発売時期を「その方の全部」として書く。
+ * 足りないときに全体の話をすると、8件ぶんの事実を全体のことのように書いてしまう。
+ * いま 9,608 人のうち 8,305 人は 8 件以下なので、ほとんどのページで全部そろっている。
+ */
+function actorFacts(person) {
+  const works = person.w ?? []
+  const complete = works.length > 0 && person.n === works.length
+  const dates = works.map((work) => work.d).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort()
+
+  const kinds = {}
+  const years = new Map()
+
+  if (complete) {
+    for (const work of works) {
+      kinds[work.k] = (kinds[work.k] ?? 0) + 1
+      if (/^\d{4}/.test(work.d || '')) {
+        const year = work.d.slice(0, 4)
+        years.set(year, (years.get(year) ?? 0) + 1)
+      }
+    }
+  }
+
+  return {
+    complete,
+    oldest: complete ? dates[0] || '' : '',
+    newest: dates[dates.length - 1] || '',
+    kinds: Object.entries(kinds).sort((a, b) => b[1] - a[1]),
+    years: [...years.entries()].sort((a, b) => a[0].localeCompare(b[0])),
+  }
+}
+
+/** 事実だけの表。順位は同じ件数の人をまとめて同順位にする。 */
+function renderFacts(person, facts, rank) {
+  const rows = []
+  const kindText = facts.kinds.length === 1
+    ? `（${KIND_LABEL[facts.kinds[0][0]] || facts.kinds[0][0]}）`
+    : facts.kinds.length
+      ? `（${facts.kinds.map(([kind, count]) => `${KIND_LABEL[kind] || kind}${count}件`).join('・')}）`
+      : ''
+
+  rows.push(['収録作品数', `${person.n.toLocaleString('ja-JP')}件${kindText}`])
+
+  if (facts.complete && facts.oldest && facts.newest) {
+    rows.push(['発売時期', facts.oldest.slice(0, 7) === facts.newest.slice(0, 7)
+      ? jpMonth(facts.newest)
+      : `${jpMonth(facts.oldest)} 〜 ${jpMonth(facts.newest)}`])
+  } else if (facts.newest) {
+    rows.push(['いちばん新しい作品', jpMonth(facts.newest)])
+  }
+
+  if (facts.years.length > 1) {
+    rows.push(['発売年の内訳', facts.years.map(([year, count]) => `${Number(year)}年 ${count}件`).join('／')])
+  }
+
+  if (rank) {
+    rows.push(['作品数の順位', `${rank.total.toLocaleString('ja-JP')}人中 ${rank.place.toLocaleString('ja-JP')}位`
+      + (rank.tied > 1 ? `（同じ${person.n.toLocaleString('ja-JP')}件の方が${rank.tied.toLocaleString('ja-JP')}人）` : '')])
+  }
+
+  return `<dl class="facts">${rows
+    .map(([key, value]) => `<dt>${escapeHtml(key)}</dt><dd>${escapeHtml(value)}</dd>`)
+    .join('')}</dl>`
+}
+
 
 const KIND_LABEL = { photo: '写真集', dvd: 'DVD' }
 
@@ -172,15 +257,30 @@ function renderRakutenWorks(works) {
   return `<ul class="work-list">${items}</ul>`
 }
 
-function renderIdol(person, related) {
+function renderIdol(person, { related, relatedGenre, sameYear, year, rank }) {
   const canonical = `${SITE_URL}/idol/${encodeURIComponent(person.slug)}/`
   const genres = Object.entries(person.g ?? {})
     .sort((a, b) => b[1] - a[1])
     .filter(([name]) => !SKIP_GENRES.has(name))
     .slice(0, 8)
 
-  const description = `${person.name}さんの出演作品${person.n.toLocaleString('ja-JP')}件を、`
+  const facts = actorFacts(person)
+
+  // 説明文もデータから作る。9,601ページが同じ文面だと、どのページも中身が無いのと同じ。
+  const kindText = facts.kinds.length === 1
+    ? `（${KIND_LABEL[facts.kinds[0][0]] || facts.kinds[0][0]}）`
+    : facts.kinds.length
+      ? `（${facts.kinds.map(([kind, count]) => `${KIND_LABEL[kind] || kind}${count}件`).join('・')}）`
+      : ''
+  const periodText = facts.complete && facts.oldest && facts.newest
+    ? (facts.oldest.slice(0, 7) === facts.newest.slice(0, 7)
+        ? `${jpMonth(facts.newest)}の作品です。`
+        : `${jpMonth(facts.oldest)}から${jpMonth(facts.newest)}までの作品です。`)
+    : (facts.newest ? `いちばん新しい作品は${jpMonth(facts.newest)}です。` : '')
+
+  const description = `${person.name}さんの出演作品${person.n.toLocaleString('ja-JP')}件${kindText}を、`
     + `DMM.com が公開しているデータからまとめています。`
+    + periodText
     + (genres.length ? `分類は${genres.slice(0, 3).map(([n]) => n).join('・')}など。` : '')
 
   const genreHtml = genres.length
@@ -190,9 +290,16 @@ function renderIdol(person, related) {
     : ''
 
   const relatedHtml = related.length
-    ? `<section class="related"><h2>同じ分類でよく出ている方</h2><div class="chips">${related
+    ? `<section class="related"><h2>${escapeHtml(relatedGenre ? `${relatedGenre}の作品に出ている方` : '同じ分類に出ている方')}</h2><div class="chips">${related
         .map((r) => `<a href="/idol/${encodeURIComponent(r.slug)}/">${escapeHtml(r.name)}</a>`)
         .join('')}</div></section>`
+    : ''
+
+  const sameYearHtml = sameYear?.length
+    ? `<section class="related"><h2>${escapeHtml(`${Number(year)}年に発売された作品がある方`)}</h2><div class="chips">${sameYear
+        .map((r) => `<a href="/idol/${encodeURIComponent(r.slug)}/">${escapeHtml(r.name)}</a>`)
+        .join('')}</div>
+      <p class="note">手元に持っている作品の発売日で数えています。この年にほかの作品が無かったとは限りません。</p></section>`
     : ''
 
   return shell({
@@ -204,10 +311,13 @@ function renderIdol(person, related) {
     body: `
       <h1>${escapeHtml(person.name)}</h1>
       <p class="lead">${escapeHtml(description)}</p>
+      ${renderFacts(person, facts, rank)}
       <section class="work-block">
         <h2>出演作品<span class="pr">広告</span></h2>
         ${renderWorks(person.w)}
-        <p class="note">DMM.com に収録されている ${person.n.toLocaleString('ja-JP')} 件のうち、新しい ${person.w.length} 件です。</p>
+        <p class="note">${facts.complete
+          ? `DMM.com に収録されている ${person.n.toLocaleString('ja-JP')} 件すべてです。`
+          : `DMM.com に収録されている ${person.n.toLocaleString('ja-JP')} 件のうち、新しい ${person.w.length} 件です。`}</p>
       </section>
       ${person.rakuten?.w?.length
         ? `<section class="work-block">
@@ -222,6 +332,7 @@ function renderIdol(person, related) {
                data-api="${escapeHtml(SUPABASE_URL)}"
                data-key="${escapeHtml(SUPABASE_ANON_KEY)}"></section>
       ${relatedHtml}
+      ${sameYearHtml}
       <section class="source-block">
         <h2>出典</h2>
         <ul class="sources"><li><a href="https://affiliate.dmm.com/api/" target="_blank" rel="noopener">DMM.com アフィリエイト Web サービス</a>（出演者ID ${escapeHtml(person.id)}）</li>${
@@ -320,6 +431,10 @@ h2 { font-size:18px; margin:30px 0 10px; display:flex; align-items:center; gap:8
 .chips { display:flex; flex-wrap:wrap; gap:8px; }
 .chips a { display:inline-flex; align-items:center; gap:6px; color:#2b6cb0; text-decoration:none; font-size:13px; border:1px solid #e2e6ef; border-radius:18px; padding:5px 12px; background:#fff; }
 .chips a:hover { border-color:#2b6cb0; }
+.facts { display:grid; grid-template-columns:max-content 1fr; margin:0 0 24px; border-top:1px solid #e2e6ef; font-size:14px; }
+.facts dt { padding:9px 18px 9px 0; color:#6b7280; border-bottom:1px solid #eceff5; }
+.facts dd { padding:9px 0; margin:0; border-bottom:1px solid #eceff5; }
+@media (max-width:520px) { .facts { grid-template-columns:1fr; } .facts dt { padding-bottom:0; border-bottom:0; font-size:13px; } }
 .related, .source-block { margin-top:30px; border-top:1px solid #e2e6ef; padding-top:8px; }
 .sources { padding-left:1.2em; font-size:14px; color:#4b5563; margin:8px 0; }
 .sources a { color:#2b6cb0; }
@@ -462,20 +577,66 @@ async function main() {
   }
   for (const rows of byGenre.values()) rows.sort((a, b) => b.count - a.count)
 
+  // 発売年ごとの人。「同じ年に作品がある方」に使う。
+  // 手元にあるのは新しい8件までなので、年は「持っている作品の発売年」であって
+  // その方の活動期間ではない。ページの但し書きでそう書いてある。
+  const byYear = new Map()
+  for (const person of people) {
+    for (const year of new Set((person.w ?? [])
+      .map((work) => String(work.d || '').slice(0, 4))
+      .filter((year) => /^\d{4}$/.test(year)))) {
+      if (!byYear.has(year)) byYear.set(year, [])
+      byYear.get(year).push(person)
+    }
+  }
+
+  // 作品数の順位。同じ件数の人は同じ順位にする（4,121人が1件で並ぶため）。
+  const rankByCount = new Map()
+  for (let index = 0; index < people.length; index += 1) {
+    const count = people[index].n
+    if (!rankByCount.has(count)) rankByCount.set(count, { place: index + 1, tied: 0 })
+    rankByCount.get(count).tied += 1
+  }
+
+  /** 一覧から、その人の近くにいる人を取り出す。上位を切ると全ページ同じ顔ぶれになる。 */
+  const neighbours = (rows, person, size = 10) => {
+    const index = rows.indexOf(person)
+    const start = Math.max(0, (index < 0 ? 0 : index) - Math.floor(size / 2))
+    return rows.slice(start, start + size + 1)
+      .filter((row) => row !== person)
+      .slice(0, size)
+      .map((row) => ({ name: row.name, slug: row.slug }))
+  }
+
   // 出演者ページ
   for (const person of people) {
-    const top = Object.entries(person.g ?? {})
-      .filter(([name]) => !SKIP_GENRES.has(name))
-      .sort((a, b) => b[1] - a[1])[0]
+    // **いちばん人数の少ない分類を選ぶ。**「アイドル」は5,342人が入っていて、
+    // そこから上位10人を出すと、どのページも同じ10人になり内部リンクとして働かない。
+    const genreNames = Object.entries(person.g ?? {})
+      .map(([name]) => name)
+      .filter((name) => !SKIP_GENRES.has(name) && !WEAK_GENRES.has(name)
+        && (byGenre.get(name)?.length ?? 0) >= 6)
+      .sort((a, b) => byGenre.get(a).length - byGenre.get(b).length)
 
-    const related = (top ? byGenre.get(top[0]) ?? [] : [])
-      .filter((row) => row.person !== person)
-      .slice(0, 10)
-      .map((row) => ({ name: row.person.name, slug: row.person.slug }))
+    const relatedGenre = genreNames[0] ?? null
+    const related = relatedGenre
+      ? neighbours(byGenre.get(relatedGenre).map((row) => row.person), person)
+      : []
+
+    const year = String(person.w?.[0]?.d || '').slice(0, 4)
+    const sameYear = /^\d{4}$/.test(year) ? neighbours(byYear.get(year) ?? [], person) : []
 
     const dir = path.join(outDir, 'idol', person.slug)
     await mkdir(dir, { recursive: true })
-    await writeFile(path.join(dir, 'index.html'), renderIdol(person, related), 'utf8')
+    await writeFile(path.join(dir, 'index.html'), renderIdol(person, {
+      related,
+      relatedGenre,
+      sameYear,
+      year,
+      rank: rankByCount.has(person.n)
+        ? { ...rankByCount.get(person.n), total: people.length }
+        : null,
+    }), 'utf8')
   }
 
   // 出典から消えた人。中身は書けない（推測は載せない方針）が、404 は返さない。
