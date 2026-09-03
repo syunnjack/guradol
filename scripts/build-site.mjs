@@ -28,7 +28,9 @@ const SITE_NAME = 'グラビア名鑑'
 const CONTACT = process.env.SITE_CONTACT || `info@${SITE_DOMAIN}`
 
 // Search Console の所有権確認。公開してよい値なので直接書く。
-const SITE_VERIFICATION = 'kzYhX_lYxpwnZjwTMxUp_RmF7mGw12MUPyCOL54kGR8'
+// Search Console の所有確認。**ドメインごとに違う。**
+// guradol.jp のものは gravure-meikan.jp では通らない。
+const SITE_VERIFICATION = process.env.SITE_VERIFICATION || '_yH97rSgvjN81riHsBdT8lZmVLwkcImdDGsL68tD3G8'
 
 // 投票と口コミの保存先。匿名キーは公開してよい値で、守りはデータベース側の RLS。
 // 未設定のときは、投稿欄そのものを出さずにページを作る。
