@@ -1,0 +1,67 @@
+name: Fetch Rakuten
+
+# 出演者ごとに、楽天市場の写真集・DVD を集める。DMM と並ぶ2社目の出典。
+#
+# **途中から再開できる**（data/rakuten-state.json に済んだ人を残す）ので、
+# 何回かに分けて流してよい。9,608人を1人あたり2回引くので、
+# 1回では終わらない前提で組んである。
+
+on:
+  schedule:
+    - cron: '0 20 1 * *'   # 毎月1日 05:00 JST
+  workflow_dispatch:
+    inputs:
+      only:
+        description: '何人だけ試すか（0 なら全部。動作確認は 20 くらい）'
+        type: string
+        default: '0'
+      minutes:
+        description: '何分で切り上げるか'
+        type: string
+        default: '300'
+      reset:
+        description: '前回の結果を捨てて最初から'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: 楽天市場の商品を集める
+        env:
+          # 市場APIは GORA・トラベルとは別のアプリ。
+          # /ichibams/api/... は applicationId と accessKey の両方が要る。
+          RAKUTEN_ICHIBA_APP_ID: ${{ secrets.RAKUTEN_ICHIBA_APP_ID }}
+          RAKUTEN_ICHIBA_ACCESS_KEY: ${{ secrets.RAKUTEN_ICHIBA_ACCESS_KEY }}
+          RAKUTEN_AFFILIATE_ID: ${{ secrets.RAKUTEN_AFFILIATE_ID }}
+          ONLY: ${{ inputs.only || '0' }}
+          MAX_MINUTES: ${{ inputs.minutes || '300' }}
+          RESET: ${{ inputs.reset && '1' || '' }}
+          PYTHONIOENCODING: utf-8
+        run: python scripts/fetch-rakuten.py
+
+      - name: 変化があれば commit する
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          git add data/rakuten-works.json data/rakuten-state.json
+
+          if git diff --cached --quiet; then
+            echo "データに変化はありませんでした。"
+            exit 0
+          fi
+
+          people=$(python -c "import io,json;print(len(json.load(io.open('data/rakuten-works.json',encoding='utf-8'))['actors']))")
+          git commit -m "楽天市場の商品を取り直す（${people}人ぶん）"
+          git pull --rebase --autostash origin main
+          git push

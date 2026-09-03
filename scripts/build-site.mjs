@@ -143,6 +143,33 @@ function shell({ title, description, canonical, crumbs, body, noindex, script, s
 `
 }
 
+/**
+ * 楽天市場の商品。**DMM と並ぶ2社目の出典。**
+ *
+ * 出典が1社だけだと、その社で取扱終了・売り切れになった時点で
+ * そのページから買える先が消える。2社あれば片方が残る。
+ *
+ * リンクは楽天が返した `affiliateUrl` をそのまま使う。組み替えない。
+ */
+function renderRakutenWorks(works) {
+  if (!works?.length) return ''
+
+  const items = works.map((work) => {
+    const cover = work.i
+      ? `<img src="${escapeHtml(work.i)}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" width="100" height="142" />`
+      : '<span class="no-cover"></span>'
+    const price = work.p ? `／${Number(work.p).toLocaleString('ja-JP')}円` : ''
+
+    return `<li class="work"><a href="${escapeHtml(work.u)}" target="_blank" rel="nofollow sponsored noopener">`
+      + cover
+      + `<span class="work-title">${escapeHtml(work.t)}</span>`
+      + `<span class="work-meta">${escapeHtml(work.s || '楽天市場')}${escapeHtml(price)}</span>`
+      + '</a></li>'
+  }).join('')
+
+  return `<ul class="work-list">${items}</ul>`
+}
+
 function renderIdol(person, related) {
   const canonical = `${SITE_URL}/idol/${encodeURIComponent(person.slug)}/`
   const genres = Object.entries(person.g ?? {})
@@ -180,6 +207,13 @@ function renderIdol(person, related) {
         ${renderWorks(person.w)}
         <p class="note">DMM.com に収録されている ${person.n.toLocaleString('ja-JP')} 件のうち、新しい ${person.w.length} 件です。</p>
       </section>
+      ${person.rakuten?.w?.length
+        ? `<section class="work-block">
+        <h2>楽天市場で買えるもの<span class="pr">広告</span></h2>
+        ${renderRakutenWorks(person.rakuten.w)}
+        <p class="note">商品名にお名前が入っているものだけを載せています。同名の別の方の商品が混ざるのを避けるためです。</p>
+      </section>`
+        : ''}
       ${genreHtml}
       <section id="ugc" class="ugc"
                data-slug="${escapeHtml(person.slug)}"
@@ -188,7 +222,11 @@ function renderIdol(person, related) {
       ${relatedHtml}
       <section class="source-block">
         <h2>出典</h2>
-        <ul class="sources"><li><a href="https://affiliate.dmm.com/api/" target="_blank" rel="noopener">DMM.com アフィリエイト Web サービス</a>（出演者ID ${escapeHtml(person.id)}）</li></ul>
+        <ul class="sources"><li><a href="https://affiliate.dmm.com/api/" target="_blank" rel="noopener">DMM.com アフィリエイト Web サービス</a>（出演者ID ${escapeHtml(person.id)}）</li>${
+          person.rakuten?.w?.length
+            ? '<li><a href="https://webservice.rakuten.co.jp/" target="_blank" rel="noopener">楽天ウェブサービス（楽天市場商品検索API）</a></li>'
+            : ''
+        }</ul>
         <p class="note">写真集・DVD の商品情報をそのまま数えたものです。プロフィール（生年月日・身長など）は出典が無いため載せていません。</p>
       </section>
       <script type="application/ld+json">${jsonLd({
@@ -376,6 +414,16 @@ async function main() {
 
   const published = await readList('published-slugs.txt')
 
+  // 楽天の商品。**無くても作れる**（まだ取っていないときは、これまでどおりのページになる）。
+  let rakuten = {}
+  try {
+    const file = await readJson(path.join(dataDir, 'rakuten-works.json'))
+    rakuten = file.actors ?? {}
+    console.log(`楽天: ${Object.keys(rakuten).length.toLocaleString('ja-JP')}人ぶんの商品を読み込みました`)
+  } catch {
+    console.log('楽天のデータが無いので、DMM だけで作ります。')
+  }
+
   const usedSlugs = new Set()
 
   const people = Object.entries(file.actors ?? {})
@@ -389,6 +437,7 @@ async function main() {
     while (usedSlugs.has(slug)) slug = `${slugify(person.name)}-${suffix++}`
     usedSlugs.add(slug)
     person.slug = slug
+    person.rakuten = rakuten[person.id] ?? null
   }
 
   await rm(outDir, { recursive: true, force: true })

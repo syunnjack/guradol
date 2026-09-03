@@ -31,6 +31,18 @@ darekore.jp（`darenano` リポジトリ）と同じ方針で運用する。あ�
 | 出典 | スクリプト | 認証情報（環境変数） |
 |---|---|---|
 | DMM.com アフィリエイト Web サービス | `scripts/fetch-gravure.py` | `DMM_API_ID` / `DMM_AFFILIATE_ID` |
+| 楽天ウェブサービス（楽天市場商品検索API） | `scripts/fetch-rakuten.py` | `RAKUTEN_ICHIBA_APP_ID` / `RAKUTEN_ICHIBA_ACCESS_KEY` / `RAKUTEN_AFFILIATE_ID` |
+
+**出典を2社にするのは、片方で取扱終了・売り切れになっても買える先を残すため。**
+darekore.jp で「クリックはあるのに成果が0」だった原因は、作品単位のリンクを
+出していなかったこと。単位を直したうえで、社を増やす。
+
+楽天は `https://openapi.rakuten.co.jp/ichibams/api/IchibaItem/Search/20260701`。
+**`app.rakuten.co.jp/services` は通らない。** BooksTotal / BooksDVD の
+エンドポイントは 404 だった（2026-09-03 実測）ので、市場APIで引く。
+GORA・トラベルとは**別のアプリ**なので、鍵も別（`RAKUTEN_ICHIBA_*`）。
+
+商品名に出演者名が入っていないものは捨てる。同名の別人や無関係な商品が混ざるため。
 
 **キーはリポジトリに書かない。** GitHub Secrets に入れ、環境変数で渡す。
 
