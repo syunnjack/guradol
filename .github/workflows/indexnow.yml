@@ -1,0 +1,103 @@
+name: IndexNow
+
+# 増えたページだけを IndexNow に送る。
+#
+# 中身が変わっていないURLを毎回送り直しても意味がなく、送りすぎとして
+# 扱われかねない。そこで公開済みURLの記録（data/indexnow-sent.txt）と
+# サイトマップを突き合わせ、増えた行だけを送る。送ったら記録を更新して
+# コミットする。
+#
+# 手動実行のときは、サイトマップ全体（最大10,000件）を送る。
+
+on:
+  workflow_run:
+    workflows: ["Deploy to GitHub Pages"]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  submit:
+    # デプロイが成功したときだけ動かす。失敗した内容を通知しても仕方がない。
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: 送るURLを決める
+        id: collect
+        run: |
+          set -euo pipefail
+
+          # head でパイプを閉じると grep が SIGPIPE で落ち、pipefail のせいで
+          # ジョブごと失敗する。いったん全部書き出してから切る。
+          curl -fsS "https://guradol.jp/sitemap.xml" > sitemap.xml
+          grep -oP '(?<=<loc>)[^<]+' sitemap.xml | sort > all-urls.txt
+
+          touch data/indexnow-sent.txt
+          sort data/indexnow-sent.txt > sent.txt
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "手動実行なので、サイトマップ全体を送ります。"
+            cp all-urls.txt new-urls.txt
+          else
+            # comm -23 は「左にだけある行」= まだ送っていないURL。
+            comm -23 all-urls.txt sent.txt > new-urls.txt
+          fi
+
+          head -10000 new-urls.txt > urls.txt
+          count=$(wc -l < urls.txt)
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+          echo "サイトマップ $(wc -l < all-urls.txt)件 / 送信対象 ${count}件"
+
+      - name: IndexNow に送る
+        if: steps.collect.outputs.count != '0'
+        env:
+          INDEXNOW_KEY: ${{ secrets.INDEXNOW_KEY }}
+        run: |
+          set -euo pipefail
+          KEY="${INDEXNOW_KEY:-guradolindex2026}"
+
+          # キーの実在確認。鍵ファイルが配信されていないと全件拒否される。
+          if ! curl -fsS "https://guradol.jp/${KEY}.txt" > /dev/null; then
+            echo "https://guradol.jp/${KEY}.txt が配信されていません。送信を中止します。"
+            exit 1
+          fi
+
+          python3 - "$KEY" < urls.txt > payload.json <<'PY'
+          import json, sys
+          key = sys.argv[1]
+          urls = [line.strip() for line in sys.stdin if line.strip()]
+          print(json.dumps({
+              "host": "guradol.jp",
+              "key": key,
+              "keyLocation": f"https://guradol.jp/{key}.txt",
+              "urlList": urls,
+          }, ensure_ascii=False))
+          PY
+
+          code=$(curl -sS -o response.txt -w '%{http_code}' -X POST \
+            -H 'Content-Type: application/json; charset=utf-8' \
+            --data @payload.json https://api.indexnow.org/indexnow)
+          echo "IndexNow の応答: ${code}"
+          cat response.txt || true
+          # 200/202 以外は失敗として扱う。
+          case "$code" in 200|202) ;; *) exit 1 ;; esac
+
+      - name: 送った記録を残す
+        if: steps.collect.outputs.count != '0' && github.event_name != 'workflow_dispatch'
+        run: |
+          set -euo pipefail
+          cat urls.txt >> data/indexnow-sent.txt
+          sort -u data/indexnow-sent.txt -o data/indexnow-sent.txt
+          if git diff --quiet -- data/indexnow-sent.txt; then
+            echo "記録に変化はありません。"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/indexnow-sent.txt
+          git commit -m "IndexNow に送ったURLを記録する"
+          git push

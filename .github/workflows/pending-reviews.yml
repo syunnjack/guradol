@@ -1,0 +1,62 @@
+name: Check pending reviews
+
+# 未承認の口コミがあれば Issue を立てる。
+#
+# 実在の人物についての書き込みなので、公開前に必ず運営が読む決まりにしている。
+# ところが「読むべきものが来ている」ことに気づく手立てが無かった。
+# Issue が立てば GitHub からメールが届くので、そこで気づける。
+#
+# 同じ内容の Issue を毎日作らないよう、開いたままのものがあれば何もしない。
+
+on:
+  schedule:
+    - cron: '0 0 * * *'   # 09:00 JST
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: 未承認の口コミを調べる
+        id: check
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE: ${{ secrets.SUPABASE_SERVICE_ROLE }}
+        run: |
+          python scripts/check-pending-reviews.py > body.md
+          if [ -s body.md ]; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: 開いたままの Issue があるか見る
+        if: steps.check.outputs.found == 'true'
+        id: existing
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          count=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open \
+            --label "口コミの確認" --json number --jq 'length')
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+
+      - name: Issue を立てる
+        if: steps.check.outputs.found == 'true' && steps.existing.outputs.count == '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh label create "口コミの確認" --repo "$GITHUB_REPOSITORY" \
+            --color "B60205" --description "公開前の確認待ち" 2>/dev/null || true
+          gh issue create --repo "$GITHUB_REPOSITORY" \
+            --title "未承認の口コミがあります" \
+            --label "口コミの確認" \
+            --body-file body.md

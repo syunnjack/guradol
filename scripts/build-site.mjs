@@ -92,7 +92,7 @@ function renderWorks(works) {
   return `<ul class="work-list">${items}</ul>`
 }
 
-function shell({ title, description, canonical, crumbs, body, noindex, script }) {
+function shell({ title, description, canonical, crumbs, body, noindex, script, schema }) {
   return `<!doctype html>
 <html lang="ja">
   <head>
@@ -111,6 +111,7 @@ function shell({ title, description, canonical, crumbs, body, noindex, script })
     <meta property="og:url" content="${canonical}" />
     <link rel="stylesheet" href="/assets/page.css" />
     ${script ? `<script defer src="${script}"></script>` : ''}
+    ${schema ? `<script type="application/ld+json">${jsonLd(schema)}</script>` : ''}
   </head>
   <body>
     <div class="wrap">
@@ -185,23 +186,56 @@ function renderIdol(person, related) {
       </section>
       <script type="application/ld+json">${jsonLd({
         '@context': 'https://schema.org',
-        '@type': 'Person',
-        name: person.name,
-        url: canonical,
+        '@graph': [
+          {
+            '@type': 'Person',
+            name: person.name,
+            url: canonical,
+            mainEntityOfPage: canonical,
+            // 出典に無い属性は書かない。数えられるのは作品数だけ。
+            subjectOf: { '@type': 'CreativeWorkSeries', name: `${person.name}の出演作品`, numberOfItems: person.n },
+          },
+          {
+            '@type': 'BreadcrumbList',
+            itemListElement: [
+              { '@type': 'ListItem', position: 1, name: SITE_NAME, item: `${SITE_URL}/` },
+              { '@type': 'ListItem', position: 2, name: '出演者一覧', item: `${SITE_URL}/idol/` },
+              { '@type': 'ListItem', position: 3, name: person.name, item: canonical },
+            ],
+          },
+        ],
       })}</script>`,
   })
 }
 
-function renderList({ title, heading, lead, canonical, crumbs, rows, pager }) {
+function renderList({ title, heading, lead, canonical, crumbs, rows, pager, breadcrumb }) {
   const list = rows
     .map((row) => `<li><a href="${escapeHtml(row.href)}">${escapeHtml(row.name)}</a><span class="count">${row.count.toLocaleString('ja-JP')}件</span></li>`)
     .join('')
+
+  const trail = [{ name: SITE_NAME, item: `${SITE_URL}/` }, ...(breadcrumb ?? []), { name: heading, item: canonical }]
 
   return shell({
     title,
     description: lead,
     canonical,
     crumbs,
+    schema: {
+      '@context': 'https://schema.org',
+      '@graph': [
+        {
+          '@type': 'CollectionPage',
+          name: title,
+          description: lead,
+          url: canonical,
+          isPartOf: { '@type': 'WebSite', name: SITE_NAME, url: `${SITE_URL}/` },
+        },
+        {
+          '@type': 'BreadcrumbList',
+          itemListElement: trail.map((t, n) => ({ '@type': 'ListItem', position: n + 1, name: t.name, item: t.item })),
+        },
+      ],
+    },
     body: `
       <h1>${escapeHtml(heading)}</h1>
       <p class="lead">${escapeHtml(lead)}</p>
@@ -493,6 +527,33 @@ async function main() {
     description: topLead,
     canonical: `${SITE_URL}/`,
     crumbs: '',
+    schema: {
+      '@context': 'https://schema.org',
+      '@graph': [
+        {
+          '@type': 'WebSite',
+          name: SITE_NAME,
+          url: `${SITE_URL}/`,
+          description: topLead,
+          inLanguage: 'ja',
+          // 名前で引くサイトなので、検索の入口を機械にも示しておく。
+          potentialAction: {
+            '@type': 'SearchAction',
+            target: { '@type': 'EntryPoint', urlTemplate: `${SITE_URL}/idol/?q={search_term_string}` },
+            'query-input': 'required name=search_term_string',
+          },
+        },
+        {
+          '@type': 'Dataset',
+          name: `${SITE_NAME} 収録データ`,
+          description: `グラビアアイドル ${people.length} 人と、その出演作品数。DMM.com アフィリエイト Web サービスが公開している項目のみ。`,
+          url: `${SITE_URL}/`,
+          creator: { '@type': 'Organization', name: SITE_NAME, url: `${SITE_URL}/` },
+          isAccessibleForFree: true,
+          license: 'https://affiliate.dmm.com/api/regulation/',
+        },
+      ],
+    },
     body: `
       <h1>${escapeHtml(SITE_NAME)}</h1>
       <p class="lead">${escapeHtml(topLead)}${escapeHtml(confirmedOn)} 時点のデータです。</p>
@@ -558,9 +619,63 @@ async function main() {
       <p><a href="mailto:${CONTACT}">${CONTACT}</a> へご連絡ください。確認のうえ対応します。</p>`,
   }), 'utf8')
 
-  // robots.txt と sitemap.xml
+  // robots.txt / llms.txt / sitemap.xml
+  //
+  // 生成AIのクローラーは名指しで許可する。載せているのは DMM.com の API が
+  // 公開している項目だけで、隠す理由がない。数え方の制約と載せていないものは
+  // llms.txt に書いてあるので、そちらも読ませる。
+  const AI_CRAWLERS = [
+    'GPTBot', 'OAI-SearchBot', 'ChatGPT-User',
+    'ClaudeBot', 'Claude-User', 'Claude-SearchBot',
+    'PerplexityBot', 'Perplexity-User',
+    'Google-Extended', 'Applebot-Extended', 'Bingbot', 'CCBot',
+  ]
   await writeFile(path.join(outDir, 'robots.txt'),
-    `User-agent: *\nAllow: /\n\nSitemap: ${SITE_URL}/sitemap.xml\n`, 'utf8')
+    `User-agent: *\nAllow: /\n\n`
+    + AI_CRAWLERS.map((ua) => `User-agent: ${ua}\nAllow: /\n`).join('\n')
+    + `\nSitemap: ${SITE_URL}/sitemap.xml\n`, 'utf8')
+
+  await writeFile(path.join(outDir, 'llms.txt'), `# ${SITE_NAME}（guradol.jp）
+
+> 写真集・DVD に出ているグラビアアイドルを、名前から引ける名鑑。DMM.com アフィリエイト Web サービスが公開している項目だけを集めています。
+
+## このサイトが載せているもの
+
+- 出演者の氏名（APIの表記そのまま）
+- 出演作品の数と、その作品ページへのリンク
+- 分類（ジャンル）別・メーカー別の集計
+- 閲覧者による投票と口コミ
+
+## 載せていないもの
+
+- 生年月日・身長・出身地などのプロフィール（APIに項目が無いため）
+- 読み仮名（APIに無いため、五十音索引そのものを作っていません。読みを勝手に振ると別人に行き着きます）
+- 当サイトによる推測・補間・独自の評価
+- アダルト作品へのリンク
+
+数値はすべて DMM.com が公開しているものを数えたものです。当サイトが独自に推定した数字はありません。
+
+## 数え方の制約
+
+- 収録は ${people.length} 人、${confirmedOn} 時点のデータです
+- 作品数は写真集・DVD の商品件数であり、出演本数そのものとは一致しません
+- 分類ページは ${GENRE_MIN_PEOPLE} 人以上、メーカーページは ${MAKER_MIN_WORKS} 件以上のものだけを作っています。下回るものはページにしていません
+- 商品の売り方を表す分類（セット商品・予約商品・ベスト盤など）は数えていません
+- 同姓同名が区別できない場合があります
+
+## 主なページ
+
+- ${SITE_URL}/ — 名前で検索
+- ${SITE_URL}/idol/ — 出演者一覧
+- ${SITE_URL}/genre/ — 分類別
+- ${SITE_URL}/maker/ — メーカー別
+- ${SITE_URL}/ranking/ — 投票ランキング
+- ${SITE_URL}/about/ — このサイトについて
+
+## 連絡先
+
+掲載内容の訂正・削除のご依頼は ${CONTACT} へ。確認のうえ対応します。
+`, 'utf8')
 
   for (const person of people) urls.push(`${SITE_URL}/idol/${encodeURI(person.slug)}/`)
 
@@ -569,6 +684,12 @@ async function main() {
     `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n`
     + urls.map((loc) => `  <url><loc>${loc}</loc><lastmod>${today}</lastmod></url>`).join('\n')
     + '\n</urlset>\n', 'utf8')
+
+  // IndexNow の鍵ファイル。検索エンジンは、送られた鍵がこのURLに置かれて
+  // いるかを見て、そのサイトの持ち主からの通知かを確かめる。
+  // 鍵は秘密ではないが、ワークフロー側と必ず同じ値にすること。
+  const INDEXNOW_KEY = process.env.INDEXNOW_KEY || 'guradolindex2026'
+  await writeFile(path.join(outDir, `${INDEXNOW_KEY}.txt`), `${INDEXNOW_KEY}\n`, 'utf8')
 
   await writeFile(path.join(outDir, 'favicon.svg'),
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="7" fill="#2b4d7e"/><text x="16" y="22" font-size="17" text-anchor="middle" fill="#fff" font-family="sans-serif">G</text></svg>\n', 'utf8')
