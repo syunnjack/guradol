@@ -54,6 +54,13 @@ HITS = 4
 PAUSE = 1.1
 AGENT = 'Mozilla/5.0 (compatible; gravure-meikan.jp/1.0)'
 
+# **Referer と Origin を付ける。** 楽天のアプリ登録には Allowed websites があり、
+# そこに載っていないドメインから叩くと 403 HTTP_REFERRER_NOT_ALLOWED が返る。
+# golf-search で、ドメインを移したあと登録を直さず47都道府県すべてが0件になった
+# （2026-08-30）。SITE_URL は build-site.mjs の SITE_DOMAIN と同じ値にする。
+SITE_URL = os.environ.get('SITE_URL', 'https://gravure-meikan.jp').rstrip('/')
+HEADERS = {'User-Agent': AGENT, 'Referer': SITE_URL, 'Origin': SITE_URL}
+
 ROOT = Path(__file__).resolve().parent.parent
 SOURCE = ROOT / 'data' / 'gravure-actor-works.json'
 OUT = ROOT / 'data' / 'rakuten-works.json'
@@ -81,7 +88,7 @@ def searchable(name):
 def fetch(url, tries=4, wait=4.0):
     for attempt in range(tries):
         try:
-            request = urllib.request.Request(url, headers={'User-Agent': AGENT})
+            request = urllib.request.Request(url, headers=HEADERS)
             with urllib.request.urlopen(request, timeout=30) as response:
                 return json.loads(response.read().decode('utf-8', 'replace'))
         except urllib.error.HTTPError as error:

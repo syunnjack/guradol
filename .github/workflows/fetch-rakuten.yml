@@ -44,6 +44,9 @@ jobs:
           RAKUTEN_ICHIBA_APP_ID: ${{ secrets.RAKUTEN_ICHIBA_APP_ID }}
           RAKUTEN_ICHIBA_ACCESS_KEY: ${{ secrets.RAKUTEN_ICHIBA_ACCESS_KEY }}
           RAKUTEN_AFFILIATE_ID: ${{ secrets.RAKUTEN_AFFILIATE_ID }}
+          # 楽天のアプリ登録の Allowed websites に載せたドメインと同じ値にする。
+          # 違うと 403 HTTP_REFERRER_NOT_ALLOWED で全件0になる。
+          SITE_URL: https://gravure-meikan.jp
           ONLY: ${{ inputs.only || '0' }}
           MAX_MINUTES: ${{ inputs.minutes || '300' }}
           RESET: ${{ inputs.reset && '1' || '' }}
