@@ -1,10 +1,13 @@
-# guradol（guradol.jp）
+# guradol（gravure-meikan.jp）
+
+**リポジトリ名は guradol だが、本番は gravure-meikan.jp。**
+guradol.jp は証明書が3日発行されなかったため、2026-09-03 にドメインを取り直した。
 
 ## プロジェクト概要
 
-グラビアアイドルの名前から出演作品を引ける名鑑サイト。**本番は https://guradol.jp**。
+グラビアアイドルの名前から出演作品を引ける名鑑サイト。**本番は https://gravure-meikan.jp**。
 
-`guradol.jp` はこのリポジトリ専用。他のリポジトリに割り当ててはいけない。
+`gravure-meikan.jp` はこのリポジトリ専用。他のリポジトリに割り当ててはいけない。
 
 darekore.jp（`darenano` リポジトリ）と同じ方針で運用する。あちらが成人向け作品、
 こちらが写真集・DVD のグラビアで、扱う出典が違うだけ。
@@ -16,7 +19,7 @@ darekore.jp（`darenano` リポジトリ）と同じ方針で運用する。あ�
 - ページには必ず出典（DMM.com アフィリエイト Web サービス）を明示する
 - **読み仮名は API に入っていない。** 五十音索引を作らない。読みを勝手に振ると別人に行き着く
 - アダルト（FANZA）作品へのリンクは置かない
-- 削除依頼の窓口 `info@guradol.jp` を画面に出しておく
+- 削除依頼の窓口 `info@gravure-meikan.jp` を画面に出しておく
 
 ### 実在しない利用者を作らない
 
@@ -57,7 +60,7 @@ darekore.jp（`darenano` リポジトリ）と同じ方針で運用する。あ�
 
 ## デプロイ先
 
-https://guradol.jp
+https://gravure-meikan.jp
 
 `.github/workflows/deploy.yml` により、`main` へのpush時に自動でビルド & デプロイされる。
 データの取り直しは `fetch-gravure.yml`。

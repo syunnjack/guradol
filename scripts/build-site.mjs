@@ -19,7 +19,9 @@ const outDir = path.join(root, 'dist')
 // ドメインはここ1箇所だけで決める。CNAME・canonical・サイトマップ・
 // llms.txt・OGP・構造化データは、すべてこの値から作られる。
 // 引っ越すときは SITE_DOMAIN を変えるだけでよい。個別に書き換えない。
-const SITE_DOMAIN = process.env.SITE_DOMAIN || 'guradol.jp'
+// guradol.jp は証明書が3日発行されず、原因が「待てずに設定を変え続けたこと」
+// だったため、ドメインを取り直した（2026-09-03）。**リポジトリ名は guradol のまま。**
+const SITE_DOMAIN = process.env.SITE_DOMAIN || 'gravure-meikan.jp'
 const SITE_URL = `https://${SITE_DOMAIN}`
 const SITE_NAME = 'グラドル名鑑'
 const CONTACT = process.env.SITE_CONTACT || `info@${SITE_DOMAIN}`
