@@ -23,7 +23,8 @@ const outDir = path.join(root, 'dist')
 // だったため、ドメインを取り直した（2026-09-03）。**リポジトリ名は guradol のまま。**
 const SITE_DOMAIN = process.env.SITE_DOMAIN || 'gravure-meikan.jp'
 const SITE_URL = `https://${SITE_DOMAIN}`
-const SITE_NAME = 'グラドル名鑑'
+// ドメイン（gravure-meikan）と揃える。インデックスが1件も無いうちに決めた。
+const SITE_NAME = 'グラビア名鑑'
 const CONTACT = process.env.SITE_CONTACT || `info@${SITE_DOMAIN}`
 
 // Search Console の所有権確認。公開してよい値なので直接書く。
@@ -580,7 +581,7 @@ async function main() {
     + `推測や独自の評価は載せていません。`
 
   await writeFile(path.join(outDir, 'index.html'), shell({
-    title: `${SITE_NAME}｜グラビアアイドルの出演作品を名前から探す`,
+    title: `${SITE_NAME}｜グラビアアイドル・グラドルの出演作品を名前から探す`,
     description: topLead,
     canonical: `${SITE_URL}/`,
     crumbs: '',
