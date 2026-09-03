@@ -16,9 +16,13 @@ const root = fileURLToPath(new URL('..', import.meta.url))
 const dataDir = path.join(root, 'data')
 const outDir = path.join(root, 'dist')
 
-const SITE_URL = 'https://guradol.jp'
+// ドメインはここ1箇所だけで決める。CNAME・canonical・サイトマップ・
+// llms.txt・OGP・構造化データは、すべてこの値から作られる。
+// 引っ越すときは SITE_DOMAIN を変えるだけでよい。個別に書き換えない。
+const SITE_DOMAIN = process.env.SITE_DOMAIN || 'guradol.jp'
+const SITE_URL = `https://${SITE_DOMAIN}`
 const SITE_NAME = 'グラドル名鑑'
-const CONTACT = 'info@guradol.jp'
+const CONTACT = process.env.SITE_CONTACT || `info@${SITE_DOMAIN}`
 
 // Search Console の所有権確認。公開してよい値なので直接書く。
 const SITE_VERIFICATION = 'kzYhX_lYxpwnZjwTMxUp_RmF7mGw12MUPyCOL54kGR8'
@@ -375,7 +379,7 @@ async function main() {
   await writeFile(path.join(outDir, 'assets/search.js'), SEARCH_JS, 'utf8')
   // 投票と口コミ、ランキングの読み込み。ビルドで作らずリポジトリに置いてある。
   await cp(path.join(root, 'assets'), path.join(outDir, 'assets'), { recursive: true })
-  await writeFile(path.join(outDir, 'CNAME'), 'guradol.jp\n', 'utf8')
+  await writeFile(path.join(outDir, 'CNAME'), `${SITE_DOMAIN}\n`, 'utf8')
 
   // 分類ごとの人。分類ページと「同じ分類でよく出ている方」に使う。
   const byGenre = new Map()
@@ -635,7 +639,7 @@ async function main() {
     + AI_CRAWLERS.map((ua) => `User-agent: ${ua}\nAllow: /\n`).join('\n')
     + `\nSitemap: ${SITE_URL}/sitemap.xml\n`, 'utf8')
 
-  await writeFile(path.join(outDir, 'llms.txt'), `# ${SITE_NAME}（guradol.jp）
+  await writeFile(path.join(outDir, 'llms.txt'), `# ${SITE_NAME}（${SITE_DOMAIN}）
 
 > 写真集・DVD に出ているグラビアアイドルを、名前から引ける名鑑。DMM.com アフィリエイト Web サービスが公開している項目だけを集めています。
 
