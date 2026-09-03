@@ -18,6 +18,16 @@ offset に上限があるので、FANZA と同じく**発売月で区切って�
   data/gravure-actor-works.json  出演者ごとの新しい作品 WORKS_PER_ACTOR 本
   data/gravure-makers.json       レーベル・出版社ごとの本数と代表作
 
+出演者1人ぶんの中身:
+
+  name  名前          n   作品数          w  新しい作品（WORKS_PER_ACTOR 本まで）
+  g     分類ごとの件数  kn  種別ごとの件数   f  いちばん古い作品の発売日
+  y     発売年ごとの件数
+  r     いま開いている月で数えた作品ID（二重計上よけ。表示には使わない）
+
+**w は8本しか残らないので、全体のことは kn / f / y に数えておく。**
+あとから w を見ても、8本より多い人の発売時期や内訳は分からない。
+
 作品ページのURLと画像URLは API が返すものをそのまま持つ（一般側は
 FANZA のように品番から組み立てられないため）。
 
@@ -93,6 +103,33 @@ def keep_newest(bucket: list, work: dict, limit: int) -> None:
     bucket.append(work)
     bucket.sort(key=lambda w: (w['d'], w['c']), reverse=True)
     del bucket[limit:]
+
+
+def counted_twice(bucket: dict, cid: str, open_month: str) -> bool:
+    """**まだ終わっていない月は、次の回でもう一度なめる。**
+
+    「次に取る月」は最後の月だけ進まない（その月の作品はまだ増えるため）。
+    そのため同じ作品を2回数えていて、作品数と分類の件数が回を追うごとに増えていた。
+    2026-09-04 時点で13人が1件ずつ多く出ていた。
+
+    数えた作品IDを、その開いている月のあいだだけ `r` に控えて、2度目を飛ばす。
+    月が変われば `r` は捨てる（過去の月は二度となめないので要らない）。
+    """
+    if not open_month:
+        return False
+
+    seen = bucket.setdefault('r', [])
+    if cid in seen:
+        return True
+
+    seen.append(cid)
+    return False
+
+
+def forget_open_month(*collections) -> None:
+    for group in collections:
+        for bucket in group.values():
+            bucket.pop('r', None)
 
 
 def load(path: Path) -> dict:
@@ -177,11 +214,14 @@ def main() -> int:
 
     print(f'{todo[0]} から {todo[-1]} まで {len(todo)}か月ぶんを取ります。', file=sys.stderr)
 
+    open_month = '' if reset else str(state.get('openMonth') or '')
+
     def save(next_month: str) -> None:
         head = {'confirmedOn': today.isoformat(), 'scanned': scanned,
                 'source': 'DMM.com アフィリエイト Web サービス（一般）',
                 'worksPerActor': WORKS_PER_ACTOR}
-        state_path.write_text(json.dumps(dict(head, nextMonth=next_month), ensure_ascii=False),
+        state_path.write_text(json.dumps(dict(head, nextMonth=next_month, openMonth=open_month),
+                                         ensure_ascii=False),
                               encoding='utf-8')
         works_path.write_text(json.dumps(dict(head, actors=actors), ensure_ascii=False),
                               encoding='utf-8')
@@ -195,6 +235,16 @@ def main() -> int:
             break
 
         got = 0
+
+        # 終わった月はもう二度となめないので、控えは要らない。
+        # なめ直すのは「まだ終わっていない今月」だけ。
+        if month == last_month:
+            if open_month != month:
+                forget_open_month(actors, makers)
+                open_month = month
+        elif open_month:
+            forget_open_month(actors, makers)
+            open_month = ''
 
         for source in SOURCES:
             items, _total = scan(cred, source, month)
@@ -226,12 +276,27 @@ def main() -> int:
                         continue
 
                     bucket = actors.setdefault(ident, {'name': name, 'n': 0, 'w': [], 'g': {}})
-                    bucket['n'] += 1
                     bucket['name'] = name
                     keep_newest(bucket['w'], work, WORKS_PER_ACTOR)
 
+                    if counted_twice(bucket, cid, open_month):
+                        continue
+
+                    bucket['n'] += 1
+
                     for genre in genres:
                         bucket['g'][genre] = bucket['g'].get(genre, 0) + 1
+
+                    # **w は新しい8件しか残らないので、全体のことはここで数えておく。**
+                    # あとから w を見ても、8件より多い人の発売時期や内訳は分からない。
+                    bucket['kn'] = bucket.get('kn') or {}
+                    bucket['kn'][source['key']] = bucket['kn'].get(source['key'], 0) + 1
+
+                    if released:
+                        if not bucket.get('f') or released < bucket['f']:
+                            bucket['f'] = released
+                        bucket['y'] = bucket.get('y') or {}
+                        bucket['y'][released[:4]] = bucket['y'].get(released[:4], 0) + 1
 
                 for entry in info.get('maker') or []:
                     ident = str(entry.get('id') or '').strip()
@@ -241,8 +306,12 @@ def main() -> int:
                         continue
 
                     bucket = makers.setdefault(ident, {'name': name, 'n': 0, 'w': []})
-                    bucket['n'] += 1
                     keep_newest(bucket['w'], work, WORKS_PER_MAKER)
+
+                    if counted_twice(bucket, cid, open_month):
+                        continue
+
+                    bucket['n'] += 1
 
         print(f'  {month}  {got:,}件  出演者 {len(actors):,}人', file=sys.stderr)
         save(months(month, last_month)[1] if month != last_month else last_month)
