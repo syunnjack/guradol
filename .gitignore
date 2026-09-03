@@ -4,3 +4,5 @@ dist/
 .env.local
 scripts/.cache/
 dist/
+
+__pycache__/

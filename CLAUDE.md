@@ -71,6 +71,20 @@ https://guradol.jp
 投げると Pages サイトごと消え、サイトが 404 になる（2026-09-02 に発生）。
 変更が必要なときは Web UI から行う。
 
+## ドメインの設定
+
+手順は [docs/domain-setup.md](docs/domain-setup.md) にある。**順番を守り、設定したら触らないこと。**
+
+ドメインは `scripts/build-site.mjs` の `SITE_DOMAIN` 1箇所だけで決まる。
+環境変数 `SITE_DOMAIN` でも指定できる。CNAME・canonical・サイトマップ・
+llms.txt・OGP・構造化データ・連絡先メールはすべてここから作られるので、
+個別のファイルを書き換えない。
+
+状態の確認は `python scripts/check-domain.py` を使う。**見るだけで何も変えない。**
+
+証明書の発行待ちに設定を触ると、GitHub 側の状態が「追加されたばかり」に
+戻り、発行処理が振り出しになる。2026年9月に3日開通しなかったのはこれが原因。
+
 ## 技術スタック
 
 - 言語: JavaScript (Node) / データ取得は Python 3
