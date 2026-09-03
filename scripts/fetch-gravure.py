@@ -246,6 +246,13 @@ def main() -> int:
             forget_open_month(actors, makers)
             open_month = ''
 
+        # **同じ月のなかで同じ作品が2回出てくることがある。**
+        # 「催眠遊戯 〜アイドールズ〜」（h_343rmq004）で、春日桃さんと夏川なみさんが
+        # 1件ずつ多く数えられていた（2026-09-04）。offset をずらしながら取るので、
+        # 境目で同じ作品が返るか、iteminfo.actor に同じ人が2度入っている。
+        # 月をなめるあいだだけ覚えておけばよい（過去の月は二度と来ない）。
+        month_seen = set()
+
         for source in SOURCES:
             items, _total = scan(cred, source, month)
 
@@ -279,6 +286,11 @@ def main() -> int:
                     bucket['name'] = name
                     keep_newest(bucket['w'], work, WORKS_PER_ACTOR)
 
+                    if ('a', ident, cid) in month_seen:
+                        continue
+
+                    month_seen.add(('a', ident, cid))
+
                     if counted_twice(bucket, cid, open_month):
                         continue
 
@@ -307,6 +319,11 @@ def main() -> int:
 
                     bucket = makers.setdefault(ident, {'name': name, 'n': 0, 'w': []})
                     keep_newest(bucket['w'], work, WORKS_PER_MAKER)
+
+                    if ('m', ident, cid) in month_seen:
+                        continue
+
+                    month_seen.add(('m', ident, cid))
 
                     if counted_twice(bucket, cid, open_month):
                         continue
