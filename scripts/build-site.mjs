@@ -357,6 +357,22 @@ async function main() {
   }
 
   const confirmedOn = file.confirmedOn || new Date().toISOString().slice(0, 10)
+
+  // **一度公開したURLを落とさない。**
+  // darekore.jp では、出典から人が消えたときにページごと消えて 404 になり、
+  // 検索に載って順位も付いていたページのクリックが 0 になった（2026-09-03）。
+  // 出典が消えるのは向こうの都合で、こちらのURLの価値ではない。
+  const readList = async (name) => {
+    try {
+      const text = await readFile(path.join(root, 'data', name), 'utf8')
+      return new Set(text.split('\n').map((line) => line.trim()).filter(Boolean))
+    } catch {
+      return new Set()
+    }
+  }
+
+  const published = await readList('published-slugs.txt')
+
   const usedSlugs = new Set()
 
   const people = Object.entries(file.actors ?? {})
@@ -406,6 +422,41 @@ async function main() {
     const dir = path.join(outDir, 'idol', person.slug)
     await mkdir(dir, { recursive: true })
     await writeFile(path.join(dir, 'index.html'), renderIdol(person, related), 'utf8')
+  }
+
+  // 出典から消えた人。中身は書けない（推測は載せない方針）が、404 は返さない。
+  const written = new Set(people.map((person) => person.slug))
+  const goneSlugs = [...published].filter((slug) => !written.has(slug))
+
+  // 取得が途中で失敗すると大量に「消えた」ことになる。その状態で作り直すと、
+  // 公開中のページがまとめて転送に変わる。**1割を超えたら作らずに止める。**
+  if (published.size && goneSlugs.length > published.size * 0.1) {
+    throw new Error(`公開済み ${published.size} 件のうち ${goneSlugs.length} 件が出典から消えています。`
+      + '取得に失敗している可能性が高いので、ページを作り直しません。')
+  }
+
+  for (const slug of goneSlugs) {
+    const dir = path.join(outDir, 'idol', slug)
+    await mkdir(dir, { recursive: true })
+    await writeFile(path.join(dir, 'index.html'), `<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="robots" content="noindex,follow" />
+    <link rel="canonical" href="${SITE_URL}/idol/" />
+    <meta http-equiv="refresh" content="0; url=/idol/" />
+    <title>このページは公開を終えました</title>
+  </head>
+  <body>
+    <p>この方は出典のデータから見当たらなくなったため、いまは載せていません。
+       <a href="/idol/">出演者の一覧</a>から探せます。</p>
+  </body>
+</html>
+`, 'utf8')
+  }
+
+  if (goneSlugs.length) {
+    console.log(`出典から消えた人の転送: ${goneSlugs.length.toLocaleString('ja-JP')}件`)
   }
 
   // 出演者一覧（作品数順・ページ送り）
@@ -682,6 +733,11 @@ async function main() {
 `, 'utf8')
 
   for (const person of people) urls.push(`${SITE_URL}/idol/${encodeURI(person.slug)}/`)
+
+  // 次回のために記録する。**これが無いと上の安全網が働かない。**
+  // 転送ページになったURLも残す（消すと、次回また404が生まれる）。
+  await writeFile(path.join(root, 'data', 'published-slugs.txt'),
+    `${[...new Set([...published, ...people.map((person) => person.slug)])].sort().join('\n')}\n`, 'utf8')
 
   const today = new Date().toISOString().slice(0, 10)
   await writeFile(path.join(outDir, 'sitemap.xml'),
