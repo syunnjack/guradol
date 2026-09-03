@@ -57,7 +57,7 @@ def pages_state() -> dict | None:
 
 
 def main() -> None:
-    domain = sys.argv[1] if len(sys.argv) > 1 else os.environ.get('SITE_DOMAIN', 'guradol.jp')
+    domain = sys.argv[1] if len(sys.argv) > 1 else os.environ.get('SITE_DOMAIN', 'gravure-meikan.jp')
     print(f'== {domain} ==\n')
 
     apex = dns_a(domain)

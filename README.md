@@ -1,10 +1,15 @@
-# guradol（guradol.jp）
+# guradol（gravure-meikan.jp）
+
+**リポジトリ名は guradol だが、本番は gravure-meikan.jp。**
+guradol.jp は証明書が3日発行されなかったため、2026-09-03 にドメインを取り直した。
 
 **グラビア名鑑。** グラビアアイドル・モデルのプロフィールと出演作品を、
 名前から引くためのサイト。
 
-- 本番URL: https://guradol.jp
-- 配信: GitHub Pages（`public/CNAME` に `guradol.jp`）
+- 本番URL: https://gravure-meikan.jp
+- 配信: GitHub Pages（`dist/CNAME` に `gravure-meikan.jp`。
+  出どころは `scripts/build-site.mjs` の `SITE_DOMAIN` 一箇所）
+- ドメインを変えるときの手順は `docs/domain-setup.md`
 
 ## darekore.jp とは分けてある
 
@@ -29,6 +34,7 @@ darekore.jp と同じ。
 | 出典 | スクリプト | 中身 |
 |---|---|---|
 | DMM.com アフィリエイト Web サービス（一般） | `scripts/fetch-gravure.py` | 写真集 39,628件 / DVD（グラビア）11,483件 |
+| 楽天ウェブサービス（楽天市場商品検索API） | `scripts/fetch-rakuten.py` | 同じ出演者の商品を2社目の買える先として足す |
 
 **アダルト（FANZA）のフロアは見ない。**
 
@@ -43,3 +49,5 @@ GitHub Secrets に入れる。**リポジトリには置かない。**
 |---|---|
 | `FANZA_API_ID` | DMM アフィリエイト API ID（一般側も同じキー） |
 | `FANZA_AFFILIATE_ID` | アフィリエイトID |
+| `RAKUTEN_ICHIBA_APP_ID` / `RAKUTEN_ICHIBA_ACCESS_KEY` | 楽天市場商品検索API（GORA・トラベルとは別アプリ） |
+| `RAKUTEN_AFFILIATE_ID` | 楽天のアフィリエイトID |

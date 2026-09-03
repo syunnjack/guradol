@@ -30,7 +30,7 @@ darekore.jp（`darenano` リポジトリ）と同じ方針で運用する。あ�
 
 | 出典 | スクリプト | 認証情報（環境変数） |
 |---|---|---|
-| DMM.com アフィリエイト Web サービス | `scripts/fetch-gravure.py` | `DMM_API_ID` / `DMM_AFFILIATE_ID` |
+| DMM.com アフィリエイト Web サービス | `scripts/fetch-gravure.py` | `FANZA_API_ID` / `FANZA_AFFILIATE_ID` |
 | 楽天ウェブサービス（楽天市場商品検索API） | `scripts/fetch-rakuten.py` | `RAKUTEN_ICHIBA_APP_ID` / `RAKUTEN_ICHIBA_ACCESS_KEY` / `RAKUTEN_AFFILIATE_ID` |
 
 **出典を2社にするのは、片方で取扱終了・売り切れになっても買える先を残すため。**

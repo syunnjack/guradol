@@ -20,7 +20,7 @@ import sys
 import urllib.parse
 import urllib.request
 
-SITE_URL = 'https://guradol.jp'
+SITE_URL = 'https://gravure-meikan.jp'
 TABLE = 'idol_reviews'
 
 
