@@ -37,6 +37,7 @@ FANZA のように品番から組み立てられないため）。
   FROM_MONTH    取り始める月（YYYY-MM。既定は前回の続き）
   RESET         1 なら前回の結果を捨てて最初から
 """
+import calendar
 import json
 import os
 import sys
@@ -90,10 +91,17 @@ def months(start: str, end: str) -> list:
 
 
 def month_bounds(month: str) -> tuple:
-    year, mon = (int(x) for x in month.split('-'))
-    nxt_y, nxt_m = (year + 1, 1) if mon == 12 else (year, mon + 1)
+    """**lte_date は「以下」なので、翌月1日を渡すとその日の作品まで入る。**
 
-    return f'{year:04d}-{mon:02d}-01T00:00:00', f'{nxt_y:04d}-{nxt_m:02d}-01T00:00:00'
+    翌月1日 00:00:00 を上限にしていたため、1日発売の作品が前月と当月の
+    2回返り、作品数と分類の件数が1件ずつ多くなっていた（2026-09-04 に13人で確認。
+    春日桃さんの「催眠遊戯 〜アイドール春日桃〜」など、全員が1日発売の作品を持つ）。
+    月末の 23:59:59 で切る。
+    """
+    year, mon = (int(x) for x in month.split('-'))
+    last_day = calendar.monthrange(year, mon)[1]
+
+    return f'{year:04d}-{mon:02d}-01T00:00:00', f'{year:04d}-{mon:02d}-{last_day:02d}T23:59:59'
 
 
 def keep_newest(bucket: list, work: dict, limit: int) -> None:
