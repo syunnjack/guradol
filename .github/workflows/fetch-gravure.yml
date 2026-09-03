@@ -7,6 +7,10 @@ name: Fetch gravure
 # 「次に取る月」から続きを取る。
 
 on:
+  # 毎月1日 03:00 JST。楽天（同 05:00 JST）より先に走らせる。
+  # 楽天は、ここで作った出演者の一覧を使って引くため。
+  schedule:
+    - cron: '0 18 1 * *'
   workflow_dispatch:
     inputs:
       from_month:

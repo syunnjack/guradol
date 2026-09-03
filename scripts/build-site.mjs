@@ -106,13 +106,29 @@ function jpMonth(iso) {
  */
 function actorFacts(person) {
   const works = person.w ?? []
-  const complete = works.length > 0 && person.n === works.length
   const dates = works.map((work) => work.d).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort()
+  const newest = dates[dates.length - 1] || ''
+  // 手元の w だけで、その方の作品を全部並べられているか。作品数の但し書きに使う。
+  const showsAll = works.length > 0 && person.n === works.length
 
+  // 取得のときに全部を数えてある（kn / f / y）なら、8件しか持っていない人でも
+  // 発売時期と内訳を書ける。fetch-gravure.py を新しくしてから取り直したデータ。
+  if (person.kn && Object.keys(person.kn).length) {
+    return {
+      complete: true,
+      showsAll,
+      oldest: person.f || '',
+      newest,
+      kinds: Object.entries(person.kn).sort((a, b) => b[1] - a[1]),
+      years: Object.entries(person.y ?? {}).sort((a, b) => a[0].localeCompare(b[0])),
+    }
+  }
+
+  // 古いデータのとき。w が n 件すべてなら、そこから数えてよい。
   const kinds = {}
   const years = new Map()
 
-  if (complete) {
+  if (showsAll) {
     for (const work of works) {
       kinds[work.k] = (kinds[work.k] ?? 0) + 1
       if (/^\d{4}/.test(work.d || '')) {
@@ -123,9 +139,10 @@ function actorFacts(person) {
   }
 
   return {
-    complete,
-    oldest: complete ? dates[0] || '' : '',
-    newest: dates[dates.length - 1] || '',
+    complete: showsAll,
+    showsAll,
+    oldest: showsAll ? dates[0] || '' : '',
+    newest,
     kinds: Object.entries(kinds).sort((a, b) => b[1] - a[1]),
     years: [...years.entries()].sort((a, b) => a[0].localeCompare(b[0])),
   }
@@ -257,7 +274,7 @@ function renderRakutenWorks(works) {
   return `<ul class="work-list">${items}</ul>`
 }
 
-function renderIdol(person, { related, relatedGenre, sameYear, year, rank }) {
+function renderIdol(person, { related, relatedGenre, sameYear, year, yearsCounted, rank }) {
   const canonical = `${SITE_URL}/idol/${encodeURIComponent(person.slug)}/`
   const genres = Object.entries(person.g ?? {})
     .sort((a, b) => b[1] - a[1])
@@ -299,7 +316,7 @@ function renderIdol(person, { related, relatedGenre, sameYear, year, rank }) {
     ? `<section class="related"><h2>${escapeHtml(`${Number(year)}年に発売された作品がある方`)}</h2><div class="chips">${sameYear
         .map((r) => `<a href="/idol/${encodeURIComponent(r.slug)}/">${escapeHtml(r.name)}</a>`)
         .join('')}</div>
-      <p class="note">手元に持っている作品の発売日で数えています。この年にほかの作品が無かったとは限りません。</p></section>`
+      ${yearsCounted ? '' : '<p class="note">手元に持っている作品の発売日で数えています。この年にほかの作品が無かったとは限りません。</p>'}</section>`
     : ''
 
   return shell({
@@ -315,7 +332,7 @@ function renderIdol(person, { related, relatedGenre, sameYear, year, rank }) {
       <section class="work-block">
         <h2>出演作品<span class="pr">広告</span></h2>
         ${renderWorks(person.w)}
-        <p class="note">${facts.complete
+        <p class="note">${facts.showsAll
           ? `DMM.com に収録されている ${person.n.toLocaleString('ja-JP')} 件すべてです。`
           : `DMM.com に収録されている ${person.n.toLocaleString('ja-JP')} 件のうち、新しい ${person.w.length} 件です。`}</p>
       </section>
@@ -582,9 +599,12 @@ async function main() {
   // その方の活動期間ではない。ページの但し書きでそう書いてある。
   const byYear = new Map()
   for (const person of people) {
-    for (const year of new Set((person.w ?? [])
-      .map((work) => String(work.d || '').slice(0, 4))
-      .filter((year) => /^\d{4}$/.test(year)))) {
+    const counted = Object.keys(person.y ?? {})
+    const years = counted.length
+      ? counted
+      : (person.w ?? []).map((work) => String(work.d || '').slice(0, 4))
+
+    for (const year of new Set(years.filter((year) => /^\d{4}$/.test(year)))) {
       if (!byYear.has(year)) byYear.set(year, [])
       byYear.get(year).push(person)
     }
@@ -625,6 +645,8 @@ async function main() {
 
     const year = String(person.w?.[0]?.d || '').slice(0, 4)
     const sameYear = /^\d{4}$/.test(year) ? neighbours(byYear.get(year) ?? [], person) : []
+    // 発売年を全部数えてあるか。数えていないなら、8件から拾った年でしかない。
+    const yearsCounted = Boolean(Object.keys(person.y ?? {}).length)
 
     const dir = path.join(outDir, 'idol', person.slug)
     await mkdir(dir, { recursive: true })
@@ -633,6 +655,7 @@ async function main() {
       relatedGenre,
       sameYear,
       year,
+      yearsCounted,
       rank: rankByCount.has(person.n)
         ? { ...rankByCount.get(person.n), total: people.length }
         : null,
