@@ -43,10 +43,17 @@ def main() -> int:
 
     cred = {'api_id': api_id, 'affiliate_id': affiliate_id, 'output': 'json'}
 
-    floors = call('FloorList', cred).get('result', {}).get('site') or []
+    payload = call('FloorList', cred)
+    floors = payload.get('result', {}).get('site') or []
+
+    if not floors:
+        print('FloorList の応答:', json.dumps(payload, ensure_ascii=False)[:800])
+        return 1
+
+    print('サイト:', [(s.get('name'), s.get('code')) for s in floors])
 
     for site in floors:
-        if site.get('name') != 'DMM.com':
+        if 'FANZA' in str(site.get('name')) or 'FANZA' in str(site.get('code')):
             continue
 
         print(f"=== {site.get('name')}（{site.get('code')}）")
