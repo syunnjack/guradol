@@ -89,6 +89,23 @@ def main() -> int:
                     if keyword:
                         break
 
+    # actor が見当たらなかったフロアで、iteminfo に何が入っているかを見る。
+    # **別のキーに出演者が入っているなら使える。**
+    for scode, fcode in (('dmmtv', 'dmmtv_video'), ('mono', 'book'), ('ebook', 'comic')):
+        payload = call('ItemList', dict(
+            cred, site='DMM.com', service=scode, floor=fcode,
+            hits=8, offset=1, sort='date', keyword='グラビア',
+        )).get('result', {})
+        time.sleep(PAUSE)
+
+        print()
+        print(f'--- {scode}/{fcode} の iteminfo')
+        for item in (payload.get('items') or [])[:8]:
+            info = item.get('iteminfo') or {}
+            shown = {k: [str(x.get('name')) for x in v][:3] for k, v in info.items() if isinstance(v, list)}
+            print(f"   {str(item.get('title'))[:30]}")
+            print(f"      {json.dumps(shown, ensure_ascii=False)[:220]}")
+
     return 0
 
 
