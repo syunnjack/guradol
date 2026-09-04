@@ -61,6 +61,8 @@ from pathlib import Path
 ENDPOINT = 'https://openapi.rakuten.co.jp/ichibams/api/IchibaItem/Search/20260701'
 HITS = 4
 PAUSE = 1.1
+# これだけ続けてAPIが答えなかったら切り上げる
+MAX_MISSES = 20
 AGENT = 'Mozilla/5.0 (compatible; gravure-meikan.jp/1.0)'
 
 # **Referer と Origin を付ける。** 楽天のアプリ登録には Allowed websites があり、
@@ -154,6 +156,7 @@ def main():
 
     limit_minutes = float(os.environ.get('MAX_MINUTES', '300'))
     started = time.time()
+    misses = 0
     today = date.today()
     hits = 0
 
@@ -181,6 +184,7 @@ def main():
         items = []
         used = []
         seen = set()
+        answered = False
 
         for suffix, bucket in (('写真集', items), ('DVD', items), ('中古', used)):
             query = urllib.parse.urlencode({
@@ -193,6 +197,9 @@ def main():
             })
             payload = fetch(f'{ENDPOINT}?{query}')
             time.sleep(PAUSE)
+
+            if payload:
+                answered = True
 
             for raw in payload.get('Items') or []:
                 item = raw.get('Item', raw)
@@ -227,6 +234,19 @@ def main():
 
         del items[HITS:]
         del used[HITS:]
+
+        # **一度も応答が無かったときは「済み」にしない。**
+        # 済みにすると、次に流したときこの人は飛ばされ、永久に空のままになる。
+        # 商品が無いのと、APIが答えなかったのは別のこと。
+        if not answered:
+            misses += 1
+            if misses >= MAX_MISSES:
+                print(f'APIが{MAX_MISSES}人ぶん続けて応答しないので切り上げます。', file=sys.stderr)
+                save()
+                return 0
+            continue
+
+        misses = 0
 
         if items or used:
             found[ident] = {'name': name, 'w': items, 'u': used}

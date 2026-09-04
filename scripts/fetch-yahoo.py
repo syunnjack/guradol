@@ -57,6 +57,8 @@ from pathlib import Path
 ENDPOINT = 'https://shopping.yahooapis.jp/ShoppingWebService/V3/itemSearch'
 HITS = 4
 PAUSE = 0.6
+# これだけ続けてAPIが答えなかったら切り上げる（1日の上限に当たった見込み）
+MAX_MISSES = 20
 AGENT = 'Mozilla/5.0 (compatible; gravure-meikan.jp/1.0)'
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -138,6 +140,7 @@ def main():
     started = time.time()
     today = date.today()
     hits = 0
+    misses = 0
 
     def save():
         STATE.write_text(json.dumps({'done': sorted(done), 'confirmedOn': today.isoformat()},
@@ -171,6 +174,19 @@ def main():
         payload = fetch(f'{ENDPOINT}?{query}')
         time.sleep(PAUSE)
 
+        # **応答が無いときは「済み」にしない。**
+        # 済みにすると、次に流したときこの人は飛ばされ、永久に空のままになる。
+        # 商品が無いのと、APIが答えなかったのは別のこと。
+        if not payload:
+            misses += 1
+            if misses >= MAX_MISSES:
+                print(f'APIが{MAX_MISSES}回続けて応答しないので切り上げます。'
+                      '（1日の上限に当たった可能性があります）', file=sys.stderr)
+                save()
+                return 0
+            continue
+
+        misses = 0
         items = []
         for item in payload.get('hits') or []:
             title = str(item.get('name') or '').strip()
