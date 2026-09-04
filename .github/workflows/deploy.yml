@@ -37,6 +37,8 @@ jobs:
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
           # Amazon アソシエイトの追跡ID。**未設定ならリンクを出さない。**
           AMAZON_ASSOCIATE_TAG: ${{ secrets.AMAZON_ASSOCIATE_TAG }}
+          # 駿河屋アフィリエイトの user_id。**未設定ならリンクを出さない。**
+          SURUGAYA_AFFILIATE_ID: ${{ secrets.SURUGAYA_AFFILIATE_ID }}
 
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
