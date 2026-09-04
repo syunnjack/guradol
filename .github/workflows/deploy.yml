@@ -35,6 +35,8 @@ jobs:
           # 匿名キーは公開してよい値。守りはデータベース側の RLS。
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          # Amazon アソシエイトの追跡ID。**未設定ならリンクを出さない。**
+          AMAZON_ASSOCIATE_TAG: ${{ secrets.AMAZON_ASSOCIATE_TAG }}
 
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
