@@ -23,14 +23,23 @@ darekore.jp で分かったこと。**成果は「リンクの単位」で決ま
 
 名前だけで引くと、同名の別人や無関係な商品が混ざる。
 
-  - キーワードは「<名前> 写真集」「<名前> DVD」の2本立て
+  - キーワードは「<名前> 写真集」「<名前> DVD」「<名前> 中古」の3本立て
   - **商品名に出演者名が入っていないものは捨てる**
     （darekore の大人のおもちゃで、「OL」が「COOL」に当たった)
   - ASCII だけの名前と2文字未満の名前は引かない（当たりすぎる）
 
+## 中古も拾う
+
+グラビアの写真集・DVDは**絶版になっているものが多い。**新品が無い作品でも、
+中古なら買える。ブックオフ・駿河屋・古本倶楽部などが楽天市場に出ている。
+
+**中古かどうかは、出品者が商品名に「中古」と書いているかで決める。**
+店名から推し量らない（「ブックオフだから中古のはず」は推測にあたる）。
+
 ## 出力
 
-  data/rakuten-works.json  出演者IDごとの商品（HITS 件まで）
+  data/rakuten-works.json  出演者IDごとの商品
+                           w = 新品ふくむ通常の商品 / u = 中古（各 HITS 件まで）
 
 環境変数:
   RAKUTEN_ICHIBA_APP_ID / RAKUTEN_ICHIBA_ACCESS_KEY / RAKUTEN_AFFILIATE_ID
@@ -170,9 +179,10 @@ def main():
             return 0
 
         items = []
+        used = []
         seen = set()
 
-        for suffix in ('写真集', 'DVD'):
+        for suffix, bucket in (('写真集', items), ('DVD', items), ('中古', used)):
             query = urllib.parse.urlencode({
                 'format': 'json', 'formatVersion': 2,
                 'applicationId': app_id, 'accessKey': access_key,
@@ -196,13 +206,18 @@ def main():
                 if url in seen:
                     continue
 
+                # **中古かどうかは、出品者が商品名に書いているかで決める。**
+                # 店名から推し量らない（「ブックオフだから中古のはず」は推測）。
+                if bucket is used and '中古' not in title:
+                    continue
+
                 seen.add(url)
                 images = item.get('mediumImageUrls') or []
                 image = images[0] if isinstance(images, list) and images else ''
                 if isinstance(image, dict):
                     image = image.get('imageUrl') or ''
 
-                items.append({
+                bucket.append({
                     't': title,
                     'u': url,
                     'i': str(image).replace('?_ex=128x128', '?_ex=200x200'),
@@ -211,9 +226,10 @@ def main():
                 })
 
         del items[HITS:]
+        del used[HITS:]
 
-        if items:
-            found[ident] = {'name': name, 'w': items}
+        if items or used:
+            found[ident] = {'name': name, 'w': items, 'u': used}
             hits += 1
 
         done.add(ident)

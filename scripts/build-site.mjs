@@ -354,6 +354,15 @@ function renderIdol(person, { related, relatedGenre, sameYear, year, yearsCounte
         <p class="note">商品名にお名前が入っているものだけを載せています。同名の別の方の商品が混ざるのを避けるためです。</p>
       </section>`
         : ''}
+      ${person.rakuten?.u?.length
+        ? `<section class="work-block">
+        <h2>中古で買えるもの<span class="pr">広告</span></h2>
+        ${renderRakutenWorks(person.rakuten.u)}
+        <p class="note">グラビアの写真集・DVD は絶版のものが多く、新品では買えないことがあります。
+          <strong>出品者が商品名に「中古」と書いているものだけ</strong>を載せています。
+          状態は商品ページでご確認ください。</p>
+      </section>`
+        : ''}
       ${genreHtml}
       <section id="ugc" class="ugc"
                data-slug="${escapeHtml(person.slug)}"
@@ -1044,6 +1053,7 @@ async function main() {
 - 「同じ年に発売された作品がある方」は、その年に発売された商品がある方の一部です。共演を表すものではありません
 - DMMTV は出演者の情報を返さないため、**作品名にお名前がそのまま入っているものだけ**を載せています。載っていないことは、出ていないことを意味しません
 - 楽天市場の商品も、商品名にお名前が入っているものだけです（同名の別の方の商品が混ざるのを避けるため）
+- 「中古で買えるもの」は、**出品者が商品名に「中古」と書いているもの**だけです。店名からは判断していません。品物の状態は当サイトでは確認していません
 - 同姓同名が区別できない場合があります
 
 ## 主なページ
