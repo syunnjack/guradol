@@ -1,0 +1,89 @@
+"""DMM.com（一般）にどのフロアがあるかを調べる。**見るだけで何も書かない。**
+
+いまは ebook/photo と mono/dvd の2フロアしか見ていない。
+一般側にほかにグラビアを扱うフロアがあれば、同じ人の作品を増やせるし、
+DMM のなかで買える先が1つ増える（配信とパッケージは別物）。
+
+FloorList でフロアの一覧を取り、そのフロアで「グラビア」を引いて
+件数と、iteminfo に actor が入っているかを見る。**actor が無いフロアは
+出演者に結びつけられないので使えない。**
+
+    python scripts/probe-floors.py
+
+環境変数: FANZA_API_ID / FANZA_AFFILIATE_ID
+"""
+import json
+import os
+import sys
+import time
+import urllib.parse
+import urllib.request
+
+BASE = 'https://api.dmm.com/affiliate/v3'
+PAUSE = 0.5
+
+
+def call(path: str, params: dict) -> dict:
+    url = f'{BASE}/{path}?' + urllib.parse.urlencode(params)
+    try:
+        with urllib.request.urlopen(url, timeout=60) as response:
+            return json.loads(response.read().decode('utf-8', 'replace'))
+    except Exception as error:
+        print(f'    {error}', file=sys.stderr)
+        return {}
+
+
+def main() -> int:
+    api_id = os.environ.get('FANZA_API_ID', '').strip()
+    affiliate_id = os.environ.get('FANZA_AFFILIATE_ID', '').strip()
+
+    if not api_id or not affiliate_id:
+        print('FANZA_API_ID と FANZA_AFFILIATE_ID が要ります。', file=sys.stderr)
+        return 1
+
+    cred = {'api_id': api_id, 'affiliate_id': affiliate_id, 'output': 'json'}
+
+    floors = call('FloorList', cred).get('result', {}).get('site') or []
+
+    for site in floors:
+        if site.get('name') != 'DMM.com':
+            continue
+
+        print(f"=== {site.get('name')}（{site.get('code')}）")
+
+        for service in site.get('service') or []:
+            for floor in service.get('floor') or []:
+                scode, fcode = service.get('code'), floor.get('code')
+                label = f"{service.get('name')} / {floor.get('name')}"
+
+                for keyword in ('グラビア', ''):
+                    payload = call('ItemList', dict(
+                        cred, site='DMM.com', service=scode, floor=fcode,
+                        hits=5, offset=1, sort='date',
+                        **({'keyword': keyword} if keyword else {}),
+                    )).get('result', {})
+                    time.sleep(PAUSE)
+
+                    total = int(payload.get('total_count') or 0)
+                    items = payload.get('items') or []
+
+                    if not items:
+                        if keyword:
+                            continue
+                        print(f'  {scode}/{fcode:<14} {label}  件数0')
+                        break
+
+                    with_actor = sum(1 for i in items if (i.get('iteminfo') or {}).get('actor'))
+                    sample = str((items[0].get('title') or ''))[:34]
+                    mark = 'グラビア' if keyword else '全体'
+                    print(f'  {scode}/{fcode:<14} {label}')
+                    print(f'      {mark} {total:>8,}件  actorあり {with_actor}/{len(items)}  例: {sample}')
+
+                    if keyword:
+                        break
+
+    return 0
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())
