@@ -31,6 +31,8 @@ jobs:
   fetch:
     runs-on: ubuntu-latest
     timeout-minutes: 350
+    outputs:
+      changed: ${{ steps.commit.outputs.changed }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v5
@@ -54,17 +56,44 @@ jobs:
         run: python scripts/fetch-rakuten.py
 
       - name: 変化があれば commit する
+        id: commit
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email 'github-actions[bot]@users.noreply.github.com'
           git add data/rakuten-works.json data/rakuten-state.json
 
           if git diff --cached --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
             echo "データに変化はありませんでした。"
             exit 0
           fi
 
           people=$(python -c "import io,json;print(len(json.load(io.open('data/rakuten-works.json',encoding='utf-8'))['actors']))")
           git commit -m "楽天市場の商品を取り直す（${people}人ぶん）"
-          git pull --rebase --autostash origin main
-          git push
+          # 取得は何回かに分けて流す。同時に走ることがあるので、競合したら引き直す。
+          pushed=false
+          for attempt in 1 2 3 4 5; do
+            if git pull --rebase --autostash origin main && git push; then
+              pushed=true
+              break
+            fi
+            echo "push が競合しました（${attempt}回目）。待って試します。"
+            sleep $((15 * attempt))
+          done
+          if [ "$pushed" != true ]; then
+            echo "push できませんでした。取れたデータは残っていません。" >&2
+            exit 1
+          fi
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+  # bot の push では deploy が起動しないため、ここから明示的に呼ぶ。
+  # これが無いと、楽天の商品を取っても本番に出ない（2026-09-04 に気づいた）。
+  deploy:
+    needs: fetch
+    if: needs.fetch.outputs.changed == 'true'
+    uses: ./.github/workflows/deploy.yml
+    secrets: inherit
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
