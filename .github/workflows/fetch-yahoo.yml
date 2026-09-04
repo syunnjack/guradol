@@ -10,7 +10,10 @@ name: Fetch Yahoo used
 
 on:
   schedule:
-    - cron: '0 21 1 * *'   # 毎月1日 06:00 JST（楽天 05:00 のあと）
+    # **毎日 06:00 JST。** appid の上限で1日では取り切れないため、日を分けて埋める。
+    # 埋まりきったあとは済みの人を読み飛ばすだけで、APIを叩かない。
+    # 取り直しは RESET=1 を付けて手で流す。
+    - cron: '0 21 * * *'
   workflow_dispatch:
     inputs:
       only:
