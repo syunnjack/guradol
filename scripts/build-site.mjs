@@ -184,7 +184,7 @@ function renderFacts(person, facts, rank) {
 }
 
 
-const KIND_LABEL = { photo: '写真集', dvd: 'DVD' }
+const KIND_LABEL = { photo: '写真集', dvd: 'DVD', book: '本（紙）' }
 
 /** 作品を表紙つきで並べる。リンク先は作品ページ、画像は権利者が返したURL。 */
 function renderWorks(works) {

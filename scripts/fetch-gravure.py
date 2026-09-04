@@ -9,6 +9,12 @@
 
   ebook/photo   写真集         39,628件  iteminfo に actor と genre（グラビア/アイドル）
   mono/dvd      DVD・Blu-ray   keyword=グラビア で 11,483件  actor が複数入る
+  mono/book     本（紙）        keyword=グラビア で 1,360件  actor あり
+
+**一般側のフロアは probe-floors.py で調べた（2026-09-04）。**
+dmmtv/dmmtv_video はグラビアで27,792件あるが、**iteminfo が空**で
+出演者が入っていないため、このなめ方では人に結びつけられない。
+ebook/comic の author は漫画家なので使わない。
 
 どちらも gte_date / lte_date で月に絞れる（写真集の2026年8月＝388件）。
 offset に上限があるので、FANZA と同じく**発売月で区切ってなめる**。
@@ -62,6 +68,12 @@ PAUSE = 0.4
 SOURCES = [
     {'key': 'photo', 'label': '写真集', 'service': 'ebook', 'floor': 'photo', 'keyword': ''},
     {'key': 'dvd', 'label': 'DVD', 'service': 'mono', 'floor': 'dvd', 'keyword': 'グラビア'},
+    # **紙の写真集。電子（ebook/photo）とは別の商品で、買える先が1つ増える。**
+    # iteminfo に actor が入っていることを確かめてある（2026-09-04・probe-floors.py）。
+    # 語を2本にしているのは、「グラビア」だけだと写真集の棚を取りこぼすため。
+    # 同じ作品が両方に当たっても、作品IDで1回しか数えない。
+    {'key': 'book', 'label': '本（紙）', 'service': 'mono', 'floor': 'book', 'keyword': 'グラビア'},
+    {'key': 'book', 'label': '本（紙）', 'service': 'mono', 'floor': 'book', 'keyword': '写真集'},
 ]
 
 OUT_DIR = Path(__file__).resolve().parent.parent / 'data'
