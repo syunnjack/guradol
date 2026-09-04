@@ -184,7 +184,7 @@ function renderFacts(person, facts, rank) {
 }
 
 
-const KIND_LABEL = { photo: '写真集', dvd: 'DVD', book: '本（紙）' }
+const KIND_LABEL = { photo: '写真集', dvd: 'DVD', book: '本（紙）', stream: '配信' }
 
 /** 作品を表紙つきで並べる。リンク先は作品ページ、画像は権利者が返したURL。 */
 function renderWorks(works) {
@@ -338,6 +338,15 @@ function renderIdol(person, { related, relatedGenre, sameYear, year, yearsCounte
           ? `DMM.com に収録されている ${person.n.toLocaleString('ja-JP')} 件すべてです。`
           : `DMM.com に収録されている ${person.n.toLocaleString('ja-JP')} 件のうち、新しい ${person.w.length} 件です。`}</p>
       </section>
+      ${person.dmmtv?.w?.length
+        ? `<section class="work-block">
+        <h2>DMMTV で見られるもの<span class="pr">広告</span></h2>
+        ${renderWorks(person.dmmtv.w.map((work) => ({ ...work, k: 'stream' })))}
+        <p class="note">DMMTV は出演者の情報を返さないため、作品名にお名前が
+          そのまま入っているものだけを載せています。ここに無くても、
+          出ていないとは限りません。</p>
+      </section>`
+        : ''}
       ${person.rakuten?.w?.length
         ? `<section class="work-block">
         <h2>楽天市場で買えるもの<span class="pr">広告</span></h2>
@@ -354,7 +363,7 @@ function renderIdol(person, { related, relatedGenre, sameYear, year, yearsCounte
       ${sameYearHtml}
       <section class="source-block">
         <h2>出典</h2>
-        <ul class="sources"><li><a href="https://affiliate.dmm.com/api/" target="_blank" rel="noopener">DMM.com アフィリエイト Web サービス</a>（出演者ID ${escapeHtml(person.id)}）</li>${
+        <ul class="sources"><li><a href="https://affiliate.dmm.com/api/" target="_blank" rel="noopener">DMM.com アフィリエイト Web サービス</a>（出演者ID ${escapeHtml(person.id)}${person.dmmtv?.w?.length ? '。DMMTV は作品名から結びつけたもの' : ''}）</li>${
           person.rakuten?.w?.length
             ? '<li><a href="https://webservice.rakuten.co.jp/" target="_blank" rel="noopener">楽天ウェブサービス（楽天市場商品検索API）</a></li>'
             : ''
@@ -550,6 +559,17 @@ async function main() {
 
   const published = await readList('published-slugs.txt')
 
+  // DMMTV の配信。**無くても作れる。**
+  // DMMTV は iteminfo が空なので、タイトルの語と名前が一致したものだけ入っている。
+  let dmmtv = {}
+  try {
+    const file = await readJson(path.join(dataDir, 'dmmtv-works.json'))
+    dmmtv = file.actors ?? {}
+    console.log(`DMMTV: ${Object.keys(dmmtv).length.toLocaleString('ja-JP')}人ぶんの配信を読み込みました`)
+  } catch {
+    console.log('DMMTV のデータが無いので、そのブロックは出しません。')
+  }
+
   // 楽天の商品。**無くても作れる**（まだ取っていないときは、これまでどおりのページになる）。
   let rakuten = {}
   try {
@@ -574,6 +594,7 @@ async function main() {
     usedSlugs.add(slug)
     person.slug = slug
     person.rakuten = rakuten[person.id] ?? null
+    person.dmmtv = dmmtv[person.id] ?? null
   }
 
   await rm(outDir, { recursive: true, force: true })
@@ -1021,6 +1042,8 @@ async function main() {
 - 出演者ページの「発売時期」「発売年の内訳」「種別の内訳」は、収録している商品の発売日から数えたものです。**その方の活動期間ではありません**
 - 「作品数の順位」は同じ件数の方を同じ順位にしています。1件だけの方が多いので、順位だけでは差が分かりません（同数が何人いるかを併記しています）
 - 「同じ年に発売された作品がある方」は、その年に発売された商品がある方の一部です。共演を表すものではありません
+- DMMTV は出演者の情報を返さないため、**作品名にお名前がそのまま入っているものだけ**を載せています。載っていないことは、出ていないことを意味しません
+- 楽天市場の商品も、商品名にお名前が入っているものだけです（同名の別の方の商品が混ざるのを避けるため）
 - 同姓同名が区別できない場合があります
 
 ## 主なページ

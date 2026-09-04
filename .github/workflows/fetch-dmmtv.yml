@@ -1,0 +1,85 @@
+name: Fetch DMMTV
+
+# DMMTV（動画配信）の作品を、タイトルから出演者に結びつける。
+#
+# **DMMTV は iteminfo が空で返る**ので、fetch-gravure.py の
+# 「iteminfo.actor で人に配る」やり方が使えない。タイトルを区切った語が
+# そのまま出演者名と一致したときだけ拾う。
+#
+# 出演者の名簿を使うので、fetch-gravure より後に走らせる。
+
+on:
+  schedule:
+    - cron: '30 19 1 * *'   # 毎月1日 04:30 JST（グラビア 03:00 のあと、楽天 05:00 の前）
+  workflow_dispatch:
+    inputs:
+      max_minutes:
+        description: '何分で打ち切るか'
+        type: string
+        default: '60'
+
+permissions:
+  contents: write
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    outputs:
+      changed: ${{ steps.commit.outputs.changed }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: main
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: DMMTV の作品を集める
+        env:
+          FANZA_API_ID: ${{ secrets.FANZA_API_ID }}
+          FANZA_AFFILIATE_ID: ${{ secrets.FANZA_AFFILIATE_ID }}
+          MAX_MINUTES: ${{ inputs.max_minutes || '60' }}
+          PYTHONIOENCODING: utf-8
+        run: python scripts/fetch-dmmtv.py
+
+      - name: 変化があれば commit する
+        id: commit
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          git add data/dmmtv-works.json
+
+          if git diff --cached --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "データに変化はありませんでした。"
+            exit 0
+          fi
+
+          git commit -m "DMMTV の作品を取り直す"
+          # ほかの取得と同時に走ることがある。競合したら待って引き直す。
+          pushed=false
+          for attempt in 1 2 3 4 5; do
+            if git pull --rebase --autostash origin main && git push; then
+              pushed=true
+              break
+            fi
+            echo "push が競合しました（${attempt}回目）。待って試します。"
+            sleep $((15 * attempt))
+          done
+          if [ "$pushed" != true ]; then
+            echo "push できませんでした。取れたデータは残っていません。" >&2
+            exit 1
+          fi
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+  # bot の push では deploy が起動しないため、ここから明示的に呼ぶ。
+  deploy:
+    needs: fetch
+    if: needs.fetch.outputs.changed == 'true'
+    uses: ./.github/workflows/deploy.yml
+    secrets: inherit
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
