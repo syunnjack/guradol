@@ -39,6 +39,9 @@ jobs:
           AMAZON_ASSOCIATE_TAG: ${{ secrets.AMAZON_ASSOCIATE_TAG }}
           # 駿河屋アフィリエイトの user_id。**未設定ならリンクを出さない。**
           SURUGAYA_AFFILIATE_ID: ${{ secrets.SURUGAYA_AFFILIATE_ID }}
+          # バリューコマース。**sid と pid の両方が揃わないと Yahoo の商品を出さない。**
+          VALUECOMMERCE_SID: ${{ secrets.VALUECOMMERCE_SID }}
+          VALUECOMMERCE_YAHOO_PID: ${{ secrets.VALUECOMMERCE_YAHOO_PID }}
 
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
