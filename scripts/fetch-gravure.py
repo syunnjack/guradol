@@ -51,6 +51,10 @@ BASE = 'https://api.dmm.com/affiliate/v3'
 MAX_OFFSET = 50000
 WORKS_PER_ACTOR = 8
 WORKS_PER_MAKER = 12
+# メーカーごとに覚えておく出演者の数。**多めに持つ。**
+# 保存のたびに上位だけへ切り詰めると、あとから本数が増える人を先に落としてしまう。
+# ページに並べるのはこの中の上位40人（build-site.mjs 側で絞る）。
+CAST_KEPT_PER_MAKER = 400
 START_MONTH = '2005-01'
 PAUSE = 0.4
 
@@ -225,6 +229,14 @@ def main() -> int:
     open_month = '' if reset else str(state.get('openMonth') or '')
 
     def save(next_month: str) -> None:
+        # メーカーによっては出演者が数千人になる。ファイルが太るので上限を置くが、
+        # 表示ぶん（40人）ちょうどで切ると、あとから伸びる人を落とす。多めに残す。
+        for bucket in makers.values():
+            cast = bucket.get('p') or {}
+            if len(cast) > CAST_KEPT_PER_MAKER:
+                bucket['p'] = dict(sorted(cast.items(),
+                                          key=lambda kv: (-kv[1], kv[0]))[:CAST_KEPT_PER_MAKER])
+
         head = {'confirmedOn': today.isoformat(), 'scanned': scanned,
                 'source': 'DMM.com アフィリエイト Web サービス（一般）',
                 'worksPerActor': WORKS_PER_ACTOR}
@@ -318,6 +330,13 @@ def main() -> int:
                         bucket['y'] = bucket.get('y') or {}
                         bucket['y'][released[:4]] = bucket['y'].get(released[:4], 0) + 1
 
+                # この作品に出ていた人。メーカーページから出演者ページへ渡す。
+                cast = []
+                for person in info.get('actor') or []:
+                    pid = str(person.get('id') or '').strip()
+                    if pid and usable_name(str(person.get('name') or '')):
+                        cast.append(pid)
+
                 for entry in info.get('maker') or []:
                     ident = str(entry.get('id') or '').strip()
                     name = str(entry.get('name') or '').strip()
@@ -337,6 +356,24 @@ def main() -> int:
                         continue
 
                     bucket['n'] += 1
+
+                    # 出演者ページと同じで、w は12本しか残らない。
+                    # 全体のことはここで数えておく。
+                    bucket['kn'] = bucket.get('kn') or {}
+                    bucket['kn'][source['key']] = bucket['kn'].get(source['key'], 0) + 1
+
+                    if released:
+                        if not bucket.get('f') or released < bucket['f']:
+                            bucket['f'] = released
+                        bucket['y'] = bucket.get('y') or {}
+                        bucket['y'][released[:4]] = bucket['y'].get(released[:4], 0) + 1
+
+                    # **メーカーページが広告だけのページだった。**
+                    # 出ている方への行き先を持たせる。IDだけ持ち、名前は
+                    # build-site.mjs が出演者データから引く（二重に持たない）。
+                    bucket['p'] = bucket.get('p') or {}
+                    for pid in cast:
+                        bucket['p'][pid] = bucket['p'].get(pid, 0) + 1
 
         print(f'  {month}  {got:,}件  出演者 {len(actors):,}人', file=sys.stderr)
         save(months(month, last_month)[1] if month != last_month else last_month)

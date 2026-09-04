@@ -43,6 +43,8 @@ const PER_PAGE = 200
 const GENRE_MIN_PEOPLE = 5
 // メーカーページを作る下限
 const MAKER_MIN_WORKS = 20
+// メーカーページに並べる出演者の数（取得は400人まで覚えている）
+const CAST_PER_MAKER = 40
 
 // 分類のうち、ページにしないもの。商品の売り方であって内容ではない。
 const SKIP_GENRES = new Set([
@@ -774,20 +776,82 @@ async function main() {
     console.log('メーカーのデータが無いので、そのページは作りません。')
   }
 
+  // 出演者IDから出演者を引く。メーカーページの行き先に使う。
+  const peopleById = new Map(people.map((person) => [person.id, person]))
+
   for (const maker of makers) {
     const canonical = `${SITE_URL}/maker/${encodeURIComponent(maker.id)}/`
-    const lead = `${maker.name}の作品 ${maker.n.toLocaleString('ja-JP')} 件のうち、新しい ${maker.w.length} 件です。`
+    const facts = actorFacts(maker)
+
+    const kindText = facts.kinds.length === 1
+      ? `（${KIND_LABEL[facts.kinds[0][0]] || facts.kinds[0][0]}）`
+      : facts.kinds.length
+        ? `（${facts.kinds.map(([kind, count]) => `${KIND_LABEL[kind] || kind}${count}件`).join('・')}）`
+        : ''
+    const periodText = facts.oldest && facts.newest
+      ? (facts.oldest.slice(0, 7) === facts.newest.slice(0, 7)
+          ? `${jpMonth(facts.newest)}の作品です。`
+          : `${jpMonth(facts.oldest)}から${jpMonth(facts.newest)}までの作品です。`)
+      : ''
+
+    const lead = `${maker.name}の作品 ${maker.n.toLocaleString('ja-JP')} 件${kindText}を集めています。${periodText}`
+
+    // **ここが無いと、広告だけのページになる。**
+    // メーカーページは商品カードしか無く、行き先が一覧へ戻る道しかなかった。
+    const cast = Object.entries(maker.p ?? {})
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .map(([id, count]) => ({ person: peopleById.get(id), count }))
+      .filter((row) => row.person)
+      .slice(0, CAST_PER_MAKER)
+
+    const castHtml = cast.length
+      ? `<section class="related"><h2>このメーカーの作品に出ている方</h2>
+        <ul class="name-list">${cast
+          .map((row) => `<li><a href="/idol/${encodeURIComponent(row.person.slug)}/">${escapeHtml(row.person.name)}</a>`
+            + `<span class="count">${row.count.toLocaleString('ja-JP')}件</span></li>`)
+          .join('')}</ul></section>`
+      : ''
+
     const html = shell({
-      title: `${maker.name}の作品｜${SITE_NAME}`,
+      title: `${maker.name}の作品${maker.n.toLocaleString('ja-JP')}件｜${SITE_NAME}`,
       description: lead,
       canonical,
       crumbs: `<a href="/maker/">メーカー別</a> ＞ ${escapeHtml(maker.name)}`,
+      schema: {
+        '@context': 'https://schema.org',
+        '@graph': [
+          {
+            '@type': 'CollectionPage',
+            name: `${maker.name}の作品`,
+            description: lead,
+            url: canonical,
+            isPartOf: { '@type': 'WebSite', name: SITE_NAME, url: `${SITE_URL}/` },
+          },
+          {
+            '@type': 'BreadcrumbList',
+            itemListElement: [
+              { '@type': 'ListItem', position: 1, name: SITE_NAME, item: `${SITE_URL}/` },
+              { '@type': 'ListItem', position: 2, name: 'メーカー別', item: `${SITE_URL}/maker/` },
+              { '@type': 'ListItem', position: 3, name: maker.name, item: canonical },
+            ],
+          },
+        ],
+      },
       body: `
         <h1>${escapeHtml(maker.name)}</h1>
         <p class="lead">${escapeHtml(lead)}${escapeHtml(confirmedOn)} 時点のデータです。</p>
+        ${renderFacts(maker, facts, null)}
         <section class="work-block">
           <h2>収録作品<span class="pr">広告</span></h2>
           ${renderWorks(maker.w)}
+          <p class="note">${facts.showsAll
+            ? `DMM.com に収録されている ${maker.n.toLocaleString('ja-JP')} 件すべてです。`
+            : `DMM.com に収録されている ${maker.n.toLocaleString('ja-JP')} 件のうち、新しい ${maker.w.length} 件です。`}</p>
+        </section>
+        ${castHtml}
+        <section class="source-block">
+          <h2>出典</h2>
+          <ul class="sources"><li><a href="https://affiliate.dmm.com/api/" target="_blank" rel="noopener">DMM.com アフィリエイト Web サービス</a>（メーカーID ${escapeHtml(maker.id)}）</li></ul>
         </section>`,
     })
     const dir = path.join(outDir, 'maker', maker.id)
