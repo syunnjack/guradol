@@ -94,10 +94,13 @@
       <input id="reviewNickname" type="text" maxlength="20" autocomplete="off" />
 
       <label for="reviewBody">口コミ（4〜400文字）</label>
-      <textarea id="reviewBody" rows="4" maxlength="400" required></textarea>
+      <textarea id="reviewBody" rows="4" maxlength="400" required
+                placeholder="例）この写真集がよかった、この作品から見はじめた"></textarea>
 
       <p class="note">
-        実在の方についての投稿です。悪口や、確認できない事実の断定は載せません。
+        実在の方についての投稿です。<strong>次のものは公開しません。</strong>
+        体つきや容姿についての書き込み、性的な内容、確認できない事実の断定、悪口。
+        作品を見た感想や、印象に残った作品を書いていただけると助かります。
         運営が内容を確認してから公開するため、すぐには表示されません。
       </p>
       <button type="submit" class="button">口コミを送る</button>
