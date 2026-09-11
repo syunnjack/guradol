@@ -6,7 +6,12 @@ name: Check pending reviews
 # ところが「読むべきものが来ている」ことに気づく手立てが無かった。
 # Issue が立てば GitHub からメールが届くので、そこで気づける。
 #
-# 同じ内容の Issue を毎日作らないよう、開いたままのものがあれば何もしない。
+# 同じ内容の Issue を毎日作らないよう、開いたままのものがあれば作らない。
+# **ただし黙るわけではない。** 前に知らせたときと顔ぶれが変わっていれば、
+# その Issue にコメントを足す。
+#
+# darekore.jp 側では、Issue を16日間閉じ忘れている間、新しい口コミが
+# 来ても通知が出ない作りになっていた。同じ穴をこちらにも開けない。
 
 on:
   schedule:
@@ -45,12 +50,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          count=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open \
-            --label "口コミの確認" --json number --jq 'length')
-          echo "count=$count" >> "$GITHUB_OUTPUT"
+          number=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open \
+            --label "口コミの確認" --json number --jq '.[0].number // ""')
+          echo "number=$number" >> "$GITHUB_OUTPUT"
 
       - name: Issue を立てる
-        if: steps.check.outputs.found == 'true' && steps.existing.outputs.count == '0'
+        if: steps.check.outputs.found == 'true' && steps.existing.outputs.number == ''
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -60,3 +65,28 @@ jobs:
             --title "未承認の口コミがあります" \
             --label "口コミの確認" \
             --body-file body.md
+
+      # 開いたままの Issue があるときは、**顔ぶれが変わったときだけ**足す。
+      # 変わっていなければ黙る。毎朝コメントが増えると読まなくなるため。
+      - name: 開いている Issue に足す
+        if: steps.check.outputs.found == 'true' && steps.existing.outputs.number != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NUMBER: ${{ steps.existing.outputs.number }}
+        run: |
+          mark=$(grep -o '<!-- pending: [^>]*-->' body.md | tail -1)
+
+          if [ -z "$mark" ]; then
+            echo "印が無いので足さない"
+            exit 0
+          fi
+
+          gh issue view "$NUMBER" --repo "$GITHUB_REPOSITORY" \
+            --json body,comments --jq '.body, (.comments[].body)' > seen.txt
+
+          if grep -qF "$mark" seen.txt; then
+            echo "#$NUMBER で知らせた顔ぶれと同じなので足さない"
+          else
+            echo "顔ぶれが変わったので #$NUMBER に足す"
+            gh issue comment "$NUMBER" --repo "$GITHUB_REPOSITORY" --body-file body.md
+          fi
