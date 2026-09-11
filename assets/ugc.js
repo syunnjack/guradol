@@ -78,7 +78,10 @@
 
   function renderReviews(rows) {
     if (!rows.length) {
-      return '<p class="note">まだ口コミはありません。</p>'
+      // **「まだありません」で終わらせない。** 何を書けばよいかを添える。
+      // 運営が自分で書いて埋めるより、書ける形にするほうが先。
+      return '<p class="note">この方の口コミは、まだ1件もありません。'
+        + '写真集やDVDを見た感想を、最初の一言として書いていただけます。</p>'
     }
 
     return `<ul class="reviews">${rows.map((row) => `
